@@ -1,0 +1,139 @@
+/* Calibre reader compatibility styles.
+ * The "original" layout deliberately does not restyle the EPUB body.
+ * LingKuma's popup/highlight styles live in upstream/content.css.
+ */
+@font-face{font-family:LingKumaReaderBook;src:url('../upstream/src/fonts/Fanwood.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:LingKumaReaderBook;src:url('../upstream/src/fonts/Fanwood_Bold.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:LingKumaReaderBook;src:url('../upstream/src/fonts/Fanwood_Italic.otf') format('opentype');font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:LingKumaReaderCJK;src:url('../upstream/src/fonts/LXGWWenKaiGBLite-Regular.ttf') format('truetype');font-display:swap}
+
+html[data-lk-reader-layout="calibre"]{
+  background:var(--lk-calibre-background,Canvas);
+  color:var(--lk-calibre-foreground,CanvasText);
+  scroll-behavior:smooth;
+}
+html[data-lk-reader-layout="calibre"] body{
+  box-sizing:border-box;
+  width:auto;
+  max-width:var(--lk-calibre-max-width,none);
+  min-height:100vh;
+  margin:0 auto;
+  padding:var(--lk-calibre-margin-top,40px) var(--lk-calibre-margin-right,60px) var(--lk-calibre-margin-bottom,40px) var(--lk-calibre-margin-left,60px);
+}
+html[data-lk-reader-layout="calibre"] body:where(:not([style*="font-size"])){
+  font-size:var(--lk-calibre-base-font-size,inherit);
+}
+html[data-lk-reader-layout="calibre"] body:where(:not([style*="font-family"])){
+  font-family:var(--lk-calibre-font-family,inherit);
+}
+html[data-lk-reader-layout="calibre"][data-lk-calibre-override-colors="true"] body{
+  background:var(--lk-calibre-background,#fff)!important;
+  color:var(--lk-calibre-foreground,#222)!important;
+}
+html[data-lk-reader-layout="calibre"][data-lk-calibre-override-colors="true"] a{
+  color:var(--lk-calibre-link,#315f9f)!important;
+}
+html[data-lk-reader-layout="calibre"] img,
+html[data-lk-reader-layout="calibre"] svg,
+html[data-lk-reader-layout="calibre"] video{max-width:100%;height:auto}
+@media(max-width:800px){
+  html[data-lk-reader-layout="calibre"] body{padding-left:min(24px,var(--lk-calibre-margin-left,24px));padding-right:min(24px,var(--lk-calibre-margin-right,24px))}
+}
+
+/* User-controlled page mode. It is isolated behind data-lk-reader-layout so it
+ * cannot leak into the original or Calibre-following modes. */
+html[data-lk-reader-layout="custom"]{
+  --lk-reader-font-size:20px;
+  --lk-reader-line-height:1.65;
+  --lk-reader-width:860px;
+  --lk-reader-font-family-custom:LingKumaReaderBook;
+  --lk-reader-background:#f8f0dc;
+  --lk-reader-foreground:#4a372b;
+  --lk-reader-link:#6c4d2e;
+  background:color-mix(in srgb,var(--lk-reader-background) 86%,#777 14%);
+  color-scheme:light;
+  scroll-behavior:smooth;
+}
+html[data-lk-reader-layout="custom"][data-lk-reader-theme="dark"]{color-scheme:dark}
+html[data-lk-reader-layout="custom"] body{
+  box-sizing:border-box;
+  max-width:min(var(--lk-reader-width),100%);
+  min-height:100vh;
+  margin:0 auto;
+  padding:var(--lk-reader-margin-top,40px) var(--lk-reader-margin-right,60px) var(--lk-reader-margin-bottom,70px) var(--lk-reader-margin-left,60px);
+  background:var(--lk-reader-background);
+  color:var(--lk-reader-foreground);
+  box-shadow:0 0 45px rgba(30,24,16,.16);
+  font-size:var(--lk-reader-font-size);
+  line-height:var(--lk-reader-line-height);
+  font-family:var(--lk-reader-font-family-custom),LingKumaReaderCJK,Georgia,serif;
+  text-rendering:optimizeLegibility;
+  overflow-wrap:anywhere;
+}
+html[data-lk-reader-layout="custom"] a{color:var(--lk-reader-link)}
+html[data-lk-reader-layout="custom"] img,
+html[data-lk-reader-layout="custom"] svg,
+html[data-lk-reader-layout="custom"] video{max-width:100%;height:auto}
+html[data-lk-reader-layout="custom"] table{max-width:100%;border-collapse:collapse}
+html[data-lk-reader-layout="custom"] pre{white-space:pre-wrap;overflow-wrap:anywhere}
+html[data-lk-reader-layout="custom"] p{margin:.6em 0 1em}
+html[data-lk-reader-layout="custom"] h1,
+html[data-lk-reader-layout="custom"] h2,
+html[data-lk-reader-layout="custom"] h3,
+html[data-lk-reader-layout="custom"] h4{line-height:1.25}
+@media(max-width:900px){
+  html[data-lk-reader-layout="custom"] body{padding-left:min(28px,var(--lk-reader-margin-left,28px));padding-right:min(28px,var(--lk-reader-margin-right,28px));box-shadow:none}
+}
+
+/* 1.0.8: authoritative custom-page overrides.
+ * Many EPUBs assign colors, fonts and backgrounds to nested DIV/SPAN classes.
+ * Body-only rules therefore appeared to do nothing. These selectors override
+ * book content while leaving LingKuma's shadow-DOM interfaces untouched. */
+html[data-lk-reader-layout="custom"]{
+  background:var(--lk-reader-background,#f8f0dc)!important;
+}
+html[data-lk-reader-layout="custom"] body{
+  width:min(var(--lk-reader-width,860px),100%)!important;
+  max-width:min(var(--lk-reader-width,860px),100%)!important;
+  margin:0 auto!important;
+  padding:var(--lk-reader-margin-top,40px) var(--lk-reader-margin-right,60px) var(--lk-reader-margin-bottom,40px) var(--lk-reader-margin-left,60px)!important;
+  background:var(--lk-reader-background,#f8f0dc)!important;
+  color:var(--lk-reader-foreground,#4a372b)!important;
+  font-family:var(--lk-reader-font-family-custom),LingKumaReaderCJK,Georgia,serif!important;
+  font-size:var(--lk-reader-font-size,20px)!important;
+  line-height:var(--lk-reader-line-height,1.65)!important;
+}
+html[data-lk-reader-layout="custom"] body :where(
+  main,article,section,header,footer,nav,aside,div,p,span,li,ul,ol,dl,dt,dd,
+  blockquote,figure,figcaption,table,thead,tbody,tfoot,tr,td,th,pre,code,
+  h1,h2,h3,h4,h5,h6,em,strong,b,i,u,s,small,sub,sup
+):not(#lingkuma-word-highlight-floating-root):not(#lingkuma-tooltip-host):not(#my-shadow-host):not(#lingkuma-sidebar):not(#lingkuma-iframe-popup):not(#lingkuma-iframe-overlay):not(#word-explosion-tooltip):not(#lingkuma-explosion-host){
+  color:var(--lk-reader-foreground,#4a372b)!important;
+  border-color:color-mix(in srgb,var(--lk-reader-foreground,#4a372b) 28%,transparent)!important;
+  font-family:var(--lk-reader-font-family-custom),LingKumaReaderCJK,Georgia,serif!important;
+  line-height:var(--lk-reader-line-height,1.65)!important;
+  background-color:transparent!important;
+  background-image:none!important;
+}
+html[data-lk-reader-layout="custom"] body :where(
+  div,p,span,li,dl,dt,dd,blockquote,figcaption,td,th,pre,code
+):not(#lingkuma-word-highlight-floating-root):not(#lingkuma-tooltip-host):not(#my-shadow-host):not(#lingkuma-sidebar):not(#lingkuma-iframe-popup):not(#lingkuma-iframe-overlay):not(#word-explosion-tooltip):not(#lingkuma-explosion-host){
+  font-size:var(--lk-reader-font-size,20px)!important;
+}
+html[data-lk-reader-layout="custom"] body h1{font-size:2em!important}
+html[data-lk-reader-layout="custom"] body h2{font-size:1.6em!important}
+html[data-lk-reader-layout="custom"] body h3{font-size:1.35em!important}
+html[data-lk-reader-layout="custom"] body h4{font-size:1.18em!important}
+html[data-lk-reader-layout="custom"] body h5{font-size:1.05em!important}
+html[data-lk-reader-layout="custom"] body h6{font-size:1em!important}
+html[data-lk-reader-layout="custom"] body a,
+html[data-lk-reader-layout="custom"] body a :where(span,em,strong,b,i){
+  color:var(--lk-reader-link,#6c4d2e)!important;
+}
+html[data-lk-reader-layout="custom"] body img,
+html[data-lk-reader-layout="custom"] body svg,
+html[data-lk-reader-layout="custom"] body canvas,
+html[data-lk-reader-layout="custom"] body video{
+  background-color:transparent!important;
+  filter:none;
+}
