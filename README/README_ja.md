@@ -1,112 +1,103 @@
 # LingKuma for Calibre
 
-[English](README.md) | [简体中文](README_zh.md) | **日本語** | [한국어](README_ko.md)
+[English](../README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
-オープンソースプロジェクト **LingKuma 1.1.0** を Calibre で利用できるようにした非公式のデスクトップ移植版です。ハイライト、単語検索、翻訳 / AI、文単位の解析、語彙管理、TTS、テーマ機能を Calibre の読書環境で利用できます。
+**See it. Click it. Learn it.**
 
-> **Calibre 移植版の公開 / メンテナンス：[`white-ink-cell`](https://github.com/white-ink-cell)**  
-> このリポジトリは LingKuma 公式の Calibre 版ではありません。LingKuma 原プロジェクトの作者表記、著作権、ライセンスは変更していません。`white-ink-cell` はこの Calibre 移植版の公開者・メンテナであることのみを示します。
+LingKuma —— *言語の壁を越えて、知識を広げるために* —— は、読書を中心に設計された翻訳・語学学習ツールです。
+
+ある言語を「学び終える」まで、その言語で書かれた本やその他のコンテンツを読むのを待つ必要はありません。
+
+知らない単語に出会ったら、**クリック**。  
+理解しにくい文に出会ったら、**クリック**。
+
+LingKuma は、まだ学習途中の言語で書かれたコンテンツを読むことをサポートします。読書を楽しみながら自然に語彙を増やし、文法や表現に慣れ、その言語への理解を深めることができます。
+
+> **まず読書を楽しみ、その過程で新しい言語を学ぶ。**
+
+## LingKuma でできること
+
+- 単語をクリックして意味を確認
+- 文全体の翻訳と分析
+- TTS による単語の発音
+- 読書をしながら語彙を学習
+- AI による文法と文脈の説明
+- 複数言語間の翻訳
+- ライトテーマとダークテーマ
+- Calibre 内でも LingKuma 本来のスタイルを維持したインターフェース
 
 ## スクリーンショット
 
 <p align="center">
-  <img src="docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
-  <img src="docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
+  <img src="../docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
+  <img src="../docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
 </p>
+
 <p align="center">
-  <img src="docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
-  <img src="docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
+  <img src="../docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
+  <img src="../docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
 </p>
+
 <p align="center">
-  <img src="docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
+  <img src="../docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
 </p>
 
-## 主な変更点
+## Calibre 移植版
 
-この移植版では、主に次の 4 点を Calibre 向けに調整しています。
+これはオープンソースプロジェクト LingKuma の非公式 Calibre 移植版です。
 
-### 1. Calibre 実行環境への対応
+Calibre 移植版では、以下の対応を追加しています：
 
-LingKuma の外側に Calibre 用の互換レイヤーを追加し、ブラウザー拡張環境に依存していた機能へ Calibre / Qt WebEngine で必要な実行機能を提供します。
-
-可能な限り LingKuma 本来の機能とコード構造を維持しています。
-
-### 2. 文選択の改善
-
-Calibre の読書環境向けに文境界判定とテキスト再構築ルールを追加し、EPUB、PDF、括弧、略語、特殊な句読点を含む文章で完全な文を取得しやすくしています。
-
-**1.0 の追加点：** 日本語・韓国語では、5 文字未満でも複数の語彙単位を含む意味のある短文・短いフレーズなら Word Explosion を開けます。単語 1 個だけの場合は従来どおり文として扱いません。
-
-### 3. すりガラス効果への対応
-
-LingKuma 原版の一部のガラス表現は、ブラウザー固有の Web コンポーネントや描画機能に依存しています。
-
-この移植版では元の UI とテーマロジックを維持しつつ、Calibre の Qt WebEngine で利用できるすりガラス互換表示を提供します。
-
-### 4. 多言語翻訳への対応
-
-LingKuma 原版の一部の AI Prompt と言語処理経路は、中国語を固定の翻訳先として扱います。
-
-この移植版では、入力言語の識別と翻訳先言語の処理を追加し、翻訳、AI 解説、TTS の言語情報、関連表示がユーザーの選択した言語に従うようにしています。
+- Calibre / Qt WebEngine 実行環境への対応
+- EPUB と PDF 閲覧時の文選択を改善
+- 日本語・韓国語の短文認識に対応
+- Calibre に対応したすりガラス効果
+- 多言語翻訳および AI 出力への対応
+- Calibre の読書環境との統合
 
 ## インストール
 
-1. **Calibre → 設定 → プラグイン** を開きます。
-2. 旧版の LingKuma for Calibre がある場合は削除し、Calibre を完全に終了します。
-3. Calibre を再起動し、**ファイルからプラグインを読み込む** を選択します。
-4. GitHub Releases の `lingkuma-calibre-1.0.zip` をインストールします。
+1. **GitHub Releases** から `lingkuma-calibre-1.0.zip` をダウンロードします。
+2. **Calibre → 設定 → プラグイン** を開きます。
+3. **ファイルからプラグインを読み込む** を選択します。
+4. ダウンロードした `lingkuma-calibre-1.0.zip` を選択します。
 5. Calibre を再起動します。
 
-> GitHub が自動生成する Source code ZIP を Calibre のプラグインとしてインストールしないでください。
+> GitHub が自動生成する `Source code (zip)` はインストールしないでください。Release に添付されている `lingkuma-calibre-1.0.zip` プラグインパッケージを使用してください。
 
-## 翻訳設定
+## その他のバージョン
 
-`LingKuma → Full Settings → AI / API Configuration`
+- [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
+- [LingKuma](https://github.com/lingkuma/LingKuma)
 
-利用可能なサービス：
+## 対応環境
 
-- Google Web Translate（実験的、API キー不要）
-- Microsoft Translator
-- Google Cloud Translation
-- LingKuma AI
-
-## 対応形式と環境
-
-直接開ける形式：
-
-- EPUB
-- HTMLZ
-- TXT
-- HTML / XHTML
-
-その他の形式は Calibre で EPUB に変換できます。PDF の品質はテキストレイヤーと元のレイアウトに依存します。
-
-動作環境：
-
-- Calibre 7.0+
+- Calibre 9.x
+- EPUB および PDF の読書
 - Windows / macOS / Linux
-- 主に Calibre 9.x でテスト
 
-## データとプライバシー
+## 設定
 
-設定、語彙、例文、読書進捗は Calibre のローカル設定ディレクトリに保存されます。
+設定画面は Calibre に統合されています。言語と AI の設定、語彙管理、TTS オプション、外観設定、オプションの WebDAV バックアップ / 復元機能を利用できます。
 
-翻訳または AI サービスを利用する場合、処理に必要な単語、文、文脈のみが選択したサービスへ送信されます。電子書籍全体、Calibre の認証情報、ライブラリメタデータを意図的にアップロードすることはありません。
+## プライバシー
 
-API キーはローカルのプラグイン状態ファイルに保存されます。WebDAV 同期はユーザーが明示的に実行した場合にのみ行われます。
+LingKuma for Calibre はローカルの状態を Calibre のプラグインデータディレクトリに保存します。翻訳、AI、リモート TTS、WebDAV の各機能では、選択したサービスを利用するために必要なテキストまたはデータが送信される場合があります。通常の単語翻訳や文翻訳のために、電子書籍または PDF ファイル全体を意図的にアップロードすることはありません。
 
 ## 上流プロジェクトとクレジット
 
-- 元プロジェクト：**LingKuma**
+- オリジナルプロジェクト：**LingKuma**
 - 上流バージョン：**LingKuma 1.1.0**
-- Calibre 移植版のメンテナンス / 公開：**white-ink-cell**
+- Calibre 移植版のメンテナンスおよび公開：**white-ink-cell**
 
-LingKuma 原プロジェクトの作者表記、著作権、ライセンス、主要 UI、同梱上流リソースの帰属は変更していません。
+このリポジトリは LingKuma の非公式 Calibre 移植版を提供します。
 
-詳細は [`UPSTREAM_ja.md`](UPSTREAM_ja.md) を参照してください。
+この移植版では、LingKuma を Calibre の読書環境に適応させながら、オリジナルプロジェクトの主要機能、インターフェース、アセット、全体的なデザインを可能な限り維持しています。Calibre 向けの変更は、主に実行環境の互換性、文選択、すりガラス効果、多言語翻訳への対応に重点を置いています。
+
+詳細については `UPSTREAM.md` を参照してください。
 
 ## ライセンス
 
-LingKuma 原プロジェクトの作者表記、著作権、ライセンスは変更していません。
+オリジナル LingKuma の作者表記、著作権、ライセンスは変更されていません。
 
-Calibre アダプター / 互換レイヤーは `LICENSE-ADAPTER.txt`、LingKuma 原ライセンスは `LICENSE-LINGKUMA.txt`、第三者リソースのライセンスと通知は `THIRD-PARTY-NOTICES.txt` および `licenses/` を参照してください。
+Calibre アダプターおよび互換レイヤーには `LICENSE-ADAPTER.txt` のライセンスが適用されます。オリジナル LingKuma のライセンスは `LICENSE-LINGKUMA.txt` に保持されており、同梱されているサードパーティのライセンスおよび通知は `THIRD-PARTY-NOTICES.txt` に記載されています。
