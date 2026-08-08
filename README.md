@@ -65,7 +65,7 @@ LingKuma helps you read content in languages you are still learning while natura
 
 <br>
 
-<img src="../docs/calibre-en-ja-light.png" alt="English to Japanese in light mode" width="70%">
+<img src="docs/calibre-en-ja-light.png" alt="English to Japanese in light mode" width="70%">
 <br>
 <sub><b>English → Japanese</b></sub><br>
 <sub>Light mode</sub>
