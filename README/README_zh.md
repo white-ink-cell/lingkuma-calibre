@@ -31,17 +31,15 @@ LingKuma 帮助你阅读仍在学习中的语言内容，让你在阅读过程�
 ## 截图
 
 <p align="center">
-  <img src="docs/calibre-ja-zh-light.png" width="48%" alt="日文翻译为中文，亮色模式">
-  <img src="docs/calibre-en-ko-dark.png" width="48%" alt="英文翻译为韩文，暗色模式">
+  <img src="docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
+  <img src="docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
 </p>
-
 <p align="center">
-  <img src="docs/calibre-zh-en-light.png" width="48%" alt="中文翻译为英文，亮色模式">
-  <img src="docs/calibre-zh-it-dark.png" width="48%" alt="中文翻译为意大利文，暗色模式">
+  <img src="docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
+  <img src="docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
 </p>
-
 <p align="center">
-  <img src="docs/calibre-en-ja-light.png" width="65%" alt="英文翻译为日文，亮色模式">
+  <img src="docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
 </p>
 
 ## Calibre 移植版
