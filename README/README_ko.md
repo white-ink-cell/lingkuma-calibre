@@ -28,20 +28,49 @@ LingKuma는 아직 배우고 있는 언어로 된 콘텐츠를 읽을 수 있도
 
 ## 스크린샷
 
-<p align="center">
-  <img src="../docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
-  <img src="../docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
-</p>
+<div align="center">
 
-<p align="center">
-  <img src="../docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
-  <img src="../docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
-</p>
+<p><i>LingKuma in action across different languages and themes.</i></p>
 
-<p align="center">
-  <img src="../docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="../docs/calibre-ja-zh-light.png" alt="Japanese to Chinese in light mode" width="95%">
+      <br>
+      <sub><b>Japanese → Chinese</b></sub><br>
+      <sub>Light mode</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="../docs/calibre-en-ko-dark.png" alt="English to Korean in dark mode" width="95%">
+      <br>
+      <sub><b>English → Korean</b></sub><br>
+      <sub>Dark mode</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="../docs/calibre-zh-en-light.png" alt="Chinese to English in light mode" width="95%">
+      <br>
+      <sub><b>Chinese → English</b></sub><br>
+      <sub>Light mode</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="../docs/calibre-zh-it-dark.png" alt="Chinese to Italian in dark mode" width="95%">
+      <br>
+      <sub><b>Chinese → Italian</b></sub><br>
+      <sub>Dark mode</sub>
+    </td>
+  </tr>
+</table>
 
+<br>
+
+<img src="../docs/calibre-en-ja-light.png" alt="English to Japanese in light mode" width="70%">
+<br>
+<sub><b>English → Japanese</b></sub><br>
+<sub>Light mode</sub>
+
+</div>
 ## Calibre 포팅 버전
 
 이 프로젝트는 오픈 소스 LingKuma 프로젝트의 비공식 Calibre 포팅 버전입니다.
