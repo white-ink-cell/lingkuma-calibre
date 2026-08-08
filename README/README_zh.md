@@ -28,7 +28,7 @@ LingKuma 帮助你阅读仍在学习中的语言内容，让你在阅读过程�
 - 支持亮色和暗色主题
 - 在 Calibre 中保留 LingKuma 原有风格的界面
 
-## 截图
+## Screenshots
 
 <p align="center">
   <img src="docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
