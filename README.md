@@ -2,13 +2,29 @@
 
 [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
-- [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
-- [LingKuma](https://github.com/lingkuma/LingKuma)
+**See it. Click it. Learn it.**
 
-An unofficial desktop port of **LingKuma 1.1.0** for Calibre, bringing LingKuma's highlighting, word lookup, translation / AI, sentence analysis, vocabulary, TTS, and theme features into the Calibre reading environment.
+LingKuma — *let knowledge spread beyond the barriers of language* — is a translation and language-learning tool designed around reading.
 
-> **Calibre port published / maintained by [`white-ink-cell`](https://github.com/white-ink-cell)**  
-> This repository is not an official Calibre version of LingKuma. The original LingKuma authorship, copyright, and licenses remain unchanged. `white-ink-cell` refers only to the maintainer and publisher of this Calibre port.
+You shouldn't have to wait until you have "learned" a language before you can start reading books and other content in that language.
+
+When you encounter a word you don't know, **click it**.  
+When a sentence is difficult to understand, **click it**.
+
+LingKuma helps you read content in languages you are still learning while naturally expanding your vocabulary, becoming more familiar with grammar and expressions, and improving your understanding of the language.
+
+> **Enjoy reading first — and learn a new language along the way.**
+
+## What can LingKuma do?
+
+- Click a word to see its meaning
+- Translate and analyze complete sentences
+- Listen to word pronunciation with TTS
+- Learn vocabulary while reading
+- Get AI-assisted grammar and contextual explanations
+- Translate between multiple languages
+- Use light and dark themes
+- Keep the original LingKuma-style interface inside Calibre
 
 ## Screenshots
 
@@ -16,102 +32,72 @@ An unofficial desktop port of **LingKuma 1.1.0** for Calibre, bringing LingKuma'
   <img src="docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
   <img src="docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
 </p>
+
 <p align="center">
   <img src="docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
   <img src="docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
 </p>
+
 <p align="center">
   <img src="docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
 </p>
 
-## Main Changes
+## Calibre Port
 
-This port focuses on four compatibility changes.
+This is an unofficial Calibre port of the open-source LingKuma project.
 
-### 1. Calibre Runtime Adaptation
+The Calibre port adds:
 
-A Calibre compatibility layer is added around LingKuma to provide the runtime capabilities that were originally supplied by the browser-extension environment.
-
-LingKuma's original features and code structure are kept unchanged wherever possible.
-
-### 2. Sentence Selection Improvements
-
-Sentence-boundary and text-reconstruction rules improve complete-sentence capture in EPUB, PDF, parenthetical text, abbreviations, and special punctuation.
-
-**New in 1.0:** meaningful short Japanese and Korean sentences or phrases with fewer than five characters can also open the Word Explosion panel when they contain more than one lexical unit. Single-word hits remain suppressed.
-
-### 3. Frosted-Glass Compatibility
-
-Some original glass effects depend on browser-specific Web components and rendering behavior that are not fully available in Calibre's Qt WebEngine.
-
-This port keeps the original UI and theme logic while providing a Calibre-compatible frosted-glass fallback.
-
-### 4. Multilingual Translation Support
-
-Some original AI prompts and language-handling paths used Chinese as the fixed target language.
-
-This port adds source-language detection and target-language handling so translation, AI explanations, TTS metadata, and related language output can follow the user's selected languages.
+- Calibre / Qt WebEngine compatibility
+- Improved sentence selection for EPUB and PDF
+- Short-sentence recognition for Japanese and Korean
+- Calibre-compatible frosted-glass effects
+- Multilingual translation and AI output support
+- Integration with the Calibre reading environment
 
 ## Installation
 
-1. Open **Calibre → Preferences → Plugins**.
-2. If an older version of LingKuma for Calibre is installed, remove it and fully exit Calibre.
-3. Reopen Calibre and choose **Load plugin from file**.
-4. Install `lingkuma-calibre-1.0.zip` from GitHub Releases.
+1. Download `lingkuma-calibre-1.0.zip` from **GitHub Releases**.
+2. Open **Calibre → Preferences → Plugins**.
+3. Choose **Load plugin from file**.
+4. Select the downloaded `lingkuma-calibre-1.0.zip`.
 5. Restart Calibre.
 
-> Do not install GitHub's automatically generated source-code ZIP as the Calibre plugin package.
+> Do not install GitHub's automatically generated `Source code (zip)` file. Use the `lingkuma-calibre-1.0.zip` plugin package attached to the release.
 
-## Translation Settings
+## Other Port
 
-Open:
+- [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
+- [LingKuma](https://github.com/lingkuma/LingKuma)
 
-`LingKuma → Full Settings → AI / API Configuration`
+## Supported Environment
 
-Available providers include:
-
-- Google Web Translate (experimental, no API key required)
-- Microsoft Translator
-- Google Cloud Translation
-- LingKuma AI
-
-## Supported Formats and Environment
-
-Directly supported:
-
-- EPUB
-- HTMLZ
-- TXT
-- HTML / XHTML
-
-Other formats can be converted to EPUB with Calibre. PDF quality depends on the text layer and original layout.
-
-Runtime:
-
-- Calibre 7.0+
+- Calibre 9.x
+- EPUB and PDF reading
 - Windows / macOS / Linux
-- Mainly tested with Calibre 9.x
 
-## Data and Privacy
+## Settings
 
-Settings, vocabulary, example sentences, and reading progress are stored locally in Calibre's configuration directory.
+The settings interface is integrated into Calibre. It includes language and AI settings, vocabulary management, TTS options, appearance controls, and optional WebDAV backup / restore.
 
-When translation or AI services are used, only the words, sentences, or context required for the request are sent to the selected provider. The plugin does not intentionally upload complete ebook files, Calibre credentials, or library metadata.
+## Privacy
 
-API keys are stored in the local plugin state file. WebDAV synchronization occurs only when explicitly requested.
+LingKuma for Calibre stores its local state in the Calibre plugin data directory. Translation, AI, remote TTS, and WebDAV features may send the text or data required for the selected service. The plugin does not intentionally upload an entire ebook or PDF file for ordinary word or sentence translation.
 
 ## Upstream Project and Attribution
 
 - Original project: **LingKuma**
 - Upstream version: **LingKuma 1.1.0**
-- Calibre port maintained / published by: **white-ink-cell**
+- Calibre port maintained and published by: **white-ink-cell**
 
-The original LingKuma authorship, copyright, licenses, core UI, and bundled upstream resources remain attributed to the original project.
+This repository provides an unofficial Calibre port of LingKuma.
 
-See [`UPSTREAM.md`](UPSTREAM.md) for details.
+The port adapts LingKuma to Calibre's reading environment while preserving the original project's core features, interface, assets, and overall design as closely as possible. Calibre-specific changes mainly focus on runtime compatibility, sentence selection, frosted-glass effects, and multilingual translation support.
+
+See `UPSTREAM.md` for more details.
 
 ## License
 
-The original LingKuma authorship, copyright, and license remain unchanged.
+The original LingKuma authorship, copyright, and licenses remain unchanged.
 
-The Calibre adapter / compatibility layer is covered by `LICENSE-ADAPTER.txt`. The original LingKuma license is preserved in `LICENSE-LINGKUMA.txt`. Bundled third-party resources retain their own notices and licenses in `THIRD-PARTY-NOTICES.txt` and `licenses/`.
+The Calibre adapter and compatibility layer are covered by `LICENSE-ADAPTER.txt`. The original LingKuma license is preserved in `LICENSE-LINGKUMA.txt`, and bundled third-party licenses and notices are documented in `THIRD-PARTY-NOTICES.txt`.
