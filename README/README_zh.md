@@ -28,20 +28,20 @@ LingKuma 帮助你阅读仍在学习中的语言内容，让你在阅读过程�
 - 支持亮色和暗色主题
 - 在 Calibre 中保留 LingKuma 原有风格的界面
 
-## Screenshots
+## 效果图
 
 <p align="center">
-  <img src="docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
-  <img src="docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
+  <img src="../docs/calibre-ja-zh-light.png" width="48%" alt="Japanese to Chinese in light mode">
+  <img src="../docs/calibre-en-ko-dark.png" width="48%" alt="English to Korean in dark mode">
 </p>
 
 <p align="center">
-  <img src="docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
-  <img src="docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
+  <img src="../docs/calibre-zh-en-light.png" width="48%" alt="Chinese to English in light mode">
+  <img src="../docs/calibre-zh-it-dark.png" width="48%" alt="Chinese to Italian in dark mode">
 </p>
 
 <p align="center">
-  <img src="docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
+  <img src="../docs/calibre-en-ja-light.png" width="65%" alt="English to Japanese in light mode">
 </p>
 
 ## Calibre 移植版
