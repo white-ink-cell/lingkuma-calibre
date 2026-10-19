@@ -229,14 +229,14 @@ LingKuma 原项目仍然是多语言工具，但这次新增的**本地字典加
 - [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
 - [LingKuma](https://github.com/lingkuma/LingKuma)
 
-## 支持环境
+## 已测试环境
 
 - **Windows x64**
 - 最低要求 **Calibre 9.16**
 - 已在 Windows Calibre 9.16 / Python 3.14 环境中测试
 - 支持 EPUB 阅读
 - 本移植版不自动转换或处理 PDF
-- **macOS 和 Linux 不在本次发布的支持范围内**
+- macOS 和 Linux 尚未测试，兼容性待确认。
 
 随包提供的 Edge TTS 原生依赖适用于 Windows AMD64 / Python 3.14。
 

@@ -229,14 +229,14 @@ LingKuma 自体は多言語対応ですが、今回追加した**ローカル辞
 - [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
 - [LingKuma](https://github.com/lingkuma/LingKuma)
 
-## 対応環境
+## 検証済みの環境
 
 - **Windows x64**
 - 必要な最低バージョン：**Calibre 9.16**
 - Windows Calibre 9.16 / Python 3.14 環境で検証済み
 - EPUB 閲覧に対応
 - この移植版では PDF を自動変換・処理しません
-- **macOS と Linux は今回のリリースのサポート対象外です**
+- macOS と Linux は未検証で、互換性は確認できていません。
 
 同梱の Edge TTS ネイティブ依存ライブラリは Windows AMD64 / Python 3.14 向けです。
 

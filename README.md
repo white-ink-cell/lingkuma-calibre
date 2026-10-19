@@ -231,14 +231,14 @@ As a result, the largest speed and lexical-meaning reliability improvement in th
 - [LingKuma for Zotero](https://github.com/white-ink-cell/lingkuma-zotero)
 - [LingKuma](https://github.com/lingkuma/LingKuma)
 
-## Supported Environment
+## Tested Environment
 
 - **Windows x64**
 - Minimum required version: **Calibre 9.16**
 - Tested with Windows Calibre 9.16 / Python 3.14
 - EPUB reading support
 - This port does not automatically convert or handle PDF files
-- **macOS and Linux are outside this release's supported platforms**
+- macOS and Linux have not been tested; compatibility remains unverified.
 
 The bundled Edge TTS native dependencies target Windows AMD64 / Python 3.14.
 

@@ -4,7 +4,7 @@
 
 - Updated the Calibre EPUB port to the pinned LingKuma 1.1.1 resource set while keeping original LingKuma authorship, interface, themes and product logic.
 - Added Calibre settings and language controls, the English local-dictionary → translation/API → optional AI lookup path, editable meanings, vocabulary import/export, AI profiles, and reading aids. Original non-English translation paths remain in place.
-- Added Local, Edge and GPT TTS settings previews. The maintained `edge-tts` 7.3.1 client is bundled for the Windows Calibre 9.16 host; the user heard US and UK speech and confirmed Stop. Live paid GPT speech was not verified. macOS/Linux are outside this release's supported platforms.
+- Added Local, Edge and GPT TTS settings previews. The maintained `edge-tts` 7.3.1 client is bundled for the Windows Calibre 9.16 host; the user heard US and UK speech and confirmed Stop. Live paid GPT speech was not verified. macOS/Linux have not been tested, so compatibility is unverified.
 - Preserved EPUB sentence selection, short Japanese/Korean phrases and Word Explosion behavior. Calibre PDF is deferred and is not automatically converted.
 - Validation: 169 Calibre-host tests with 15 expected skips and 46 Node tests with one expected skip passed on the reviewed source. The exact 199-entry release candidate installed in Calibre 9.16 and showed live German EPUB Quick Context results in Chinese and Japanese in a visible Windows reader; normal close exited 0. An offscreen-only WebEngine teardown test exited with a Windows access violation. Live AI Detail was not tested at the product owner's direction.
 
