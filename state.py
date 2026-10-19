@@ -8,11 +8,13 @@ thread-safe JSON store.
 
 from __future__ import annotations
 
+import ast
 import base64
 import hashlib
 import copy
 import html
 import json
+import math
 import os
 import random
 import re
@@ -32,7 +34,7 @@ from calibre_plugins.lingkuma_calibre.version import USER_AGENT, VERSION_STR
 SCHEMA_VERSION = 1
 
 DEFAULT_TTS_CONFIG: dict[str, Any] = {
-    'wordTTSProvider': 'local',
+    'wordTTSProvider': 'edge',
     'sentenceTTSProvider': 'local',
     'localTTSVoice': '',
     'localTTSRate': 1,
@@ -69,6 +71,28 @@ DEFAULT_STORAGE: dict[str, Any] = {
     'autoDetectJapaneseKanji': True,
     'useKuromojiTokenizer': False,
     'autoLoadKuromojiForJapanese': False,
+    'bionicEnabled': False,
+    'bionicFontFamily': 'auto',
+    'bionicFontSize': 16,
+    'thanoxReadingEnabled': False,
+    'posHighlightEnabled': False,
+    'posHighlightLanguage': 'german',
+    'posHighlightVerbEnabled': True,
+    'posHighlightVerbBackgroundEnabled': True,
+    'posHighlightVerbBackgroundColor': '#FF6B6B40',
+    'posHighlightVerbUnderlineEnabled': True,
+    'posHighlightVerbUnderlineStyle': 'wavy',
+    'posHighlightVerbUnderlineColor': '#FF6B6B',
+    'posHighlightVerbUnderlineThickness': 2,
+    'posHighlightVerbUnderlinePosition': 'bottom',
+    'posHighlightPrepositionEnabled': True,
+    'posHighlightPrepositionBackgroundEnabled': True,
+    'posHighlightPrepositionBackgroundColor': '#f2935440',
+    'posHighlightPrepositionUnderlineEnabled': True,
+    'posHighlightPrepositionUnderlineStyle': 'solid',
+    'posHighlightPrepositionUnderlineColor': '#f29354',
+    'posHighlightPrepositionUnderlineThickness': 2,
+    'posHighlightPrepositionUnderlinePosition': 'bottom',
     'autoRequestAITranslations': True,
     'autoRequestAITranslations2': True,
     'autoAddAITranslations': False,
@@ -88,6 +112,10 @@ DEFAULT_STORAGE: dict[str, Any] = {
     'selectionPopupGap': 10,
     'tooltipMinimized': False,
     'explosionPriorityMode': False,
+    'explosionHighlightWithTTS': False,
+    'explosionHighlightNoTTS': False,
+    'explosionTTSOnly': False,
+    'showKnownSentenceAnimation': True,
     'wordQueryKey': 'q',
     'copySentenceKey': 'w',
     'analysisWindowKey': 'e',
@@ -125,6 +153,14 @@ DEFAULT_STORAGE: dict[str, Any] = {
     'tooltipBackground': {'enabled': True, 'useCustom': False, 'defaultType': 'svg'},
     'enableWaifu': False,
     'readingRuler': False,
+    'rulerSettings': {
+        'height': 24,
+        'color': '#6f6f6f',
+        'opacity': 0.3,
+        'isInverted': False,
+        'widthMode': 'auto',
+        'customWidth': 200,
+    },
     'sidePanelBtn': False,
     'useOrionTTS': False,
     'cloudConfig': {'cloudDbEnabled': False, 'cloudDualWrite': False},
@@ -135,7 +171,7 @@ DEFAULT_STORAGE: dict[str, Any] = {
     'webdavConfig': {'url': '', 'username': '', 'password': '', 'filename': 'lingkuma-calibre-backup.json'},
     'settingsPanelTheme': 'light',
     'ttsConfig': copy.deepcopy(DEFAULT_TTS_CONFIG),
-    'wordTTSProvider': 'local',
+    'wordTTSProvider': 'edge',
     'sentenceTTSProvider': 'local',
     'enableWordTTS': True,
     'enableSentenceTTS': True,
@@ -200,7 +236,7 @@ DEFAULT_STORAGE: dict[str, Any] = {
         'apiModel': '',
         'apiKey': '',
         'apiTemperature': 1,
-        'aiLanguageDetectionPrompt': '',
+        'enableApiPolling': False,
         'gptTTSBaseURL': '',
         'gptTTSApiKey': '',
         'gptTTSModel': 'gpt-4o-mini-tts',
@@ -209,6 +245,7 @@ DEFAULT_STORAGE: dict[str, Any] = {
         'gptTTSSpeed': 1,
         'gptTTSInstructions': '',
     },
+    'customApiProfiles': {'profiles': [], 'activeProfileId': None},
 }
 
 DEFAULT_AI_KEYS_B64 = (
@@ -321,6 +358,86 @@ def fresh_record(word: str, original: str | None = None) -> dict[str, Any]:
     }
 
 
+PORTABLE_WORD_FIELDS = frozenset({
+    'word', 'term', 'status', 'language', 'translations', 'tags',
+    'sentences', 'statusHistory', 'isCustom', 'createdAt', 'updatedAt',
+})
+
+
+def _portable_word_record(record: dict[str, Any]) -> dict[str, Any]:
+    def plain_text(value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        candidate = value.strip()
+        if not candidate or candidate[0] not in '{[(' or candidate[-1] not in '}])':
+            return True
+        if len(candidate) > 8192:
+            return False
+        for parse in (json.loads, ast.literal_eval):
+            try:
+                parsed = parse(candidate)
+            except (ValueError, SyntaxError, TypeError, RecursionError):
+                continue
+            if isinstance(parsed, (dict, list, tuple, set)):
+                return False
+            return True
+        if candidate[0] == '(' and candidate[-1] == ')' and not any(
+                marker in candidate for marker in '{}[]'):
+            return True
+        # A repr containing non-finite numbers can fail both parsers while
+        # still carrying an imported object and its credentials.
+        return False
+
+    def timestamp(value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        try:
+            datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return True
+        except ValueError:
+            return False
+
+    history = record.get('statusHistory')
+    if not isinstance(history, dict):
+        raise ValueError('学习状态历史格式无效；未导出数据')
+    portable_history = {}
+    for key, value in history.items():
+        if key in {'0', '1', '2', '3', '4', '5'} and timestamp(value):
+            portable_history[key] = value
+        elif timestamp(key) and isinstance(value, str) and value in {'0', '1', '2', '3', '4', '5'}:
+            portable_history[key] = value
+        elif (key in {'0', '1', '2', '3', '4', '5'} and isinstance(value, dict)
+              and set(value) == {'createTime', 'updateTime'}
+              and all(isinstance(item, (int, float)) and not isinstance(item, bool)
+                      and math.isfinite(item) and item >= 0 for item in value.values())):
+            try:
+                portable_history[key] = datetime.fromtimestamp(
+                    value['updateTime'] / 1000, timezone.utc).isoformat()
+            except (ValueError, OverflowError, OSError) as error:
+                raise ValueError('学习状态历史格式无效；未导出数据') from error
+        else:
+            raise ValueError('学习状态历史格式无效；未导出数据')
+    if not timestamp(record.get('createdAt')) or not timestamp(record.get('updatedAt')):
+        raise ValueError('学习记录时间格式无效；未导出数据')
+    if any(not plain_text(record.get(key)) for key in ('word', 'term', 'language')):
+        raise ValueError('学习文本字段格式无效；未导出数据')
+    for key in ('translations', 'tags'):
+        items = record.get(key)
+        if not isinstance(items, list) or any(not plain_text(item) for item in items):
+            raise ValueError('学习文本字段格式无效；未导出数据')
+    sentences = record.get('sentences')
+    if not isinstance(sentences, list) or any(
+        not isinstance(item, dict) or any(not plain_text(item.get(key))
+                                          for key in ('sentence', 'translation', 'url'))
+        for item in sentences
+    ):
+        raise ValueError('学习例句格式无效；未导出数据')
+    portable = {key: deep_copy(value) for key, value in record.items()
+                if key in PORTABLE_WORD_FIELDS}
+    portable['statusHistory'] = portable_history
+    return portable
+
+
 def normalize_record(word: str, raw: Any = None) -> dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
     rec = fresh_record(word, raw.get('term') or raw.get('word') or word)
@@ -339,6 +456,14 @@ def normalize_record(word: str, raw: Any = None) -> dict[str, Any]:
     return rec
 
 
+def is_word_record_shape(value: Any) -> bool:
+    """Distinguish the ordinary word `words` from a backup's words map."""
+    return isinstance(value, dict) and any(
+        field in value and not isinstance(value[field], dict)
+        for field in ('word', 'term', 'status', 'language', 'translations', 'tags', 'sentences')
+    )
+
+
 def merge_records(local_raw: Any, remote_raw: Any, word: str) -> dict[str, Any]:
     local = normalize_record(word, local_raw)
     remote = normalize_record(word, remote_raw)
@@ -348,6 +473,9 @@ def merge_records(local_raw: Any, remote_raw: Any, word: str) -> dict[str, Any]:
         sentences[item['sentence']] = item
     merged = dict(local)
     merged.update(newer)
+    local_status, remote_status = int(local['status']), int(remote['status'])
+    if (local_status >= 4) != (remote_status >= 4):
+        merged['status'] = str(min(local_status, remote_status))
     merged['translations'] = list(dict.fromkeys(local['translations'] + remote['translations']))
     merged['tags'] = list(dict.fromkeys(local['tags'] + remote['tags']))
     merged['sentences'] = list(sentences.values())
@@ -368,6 +496,7 @@ class StateStore:
         self._ai_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._ai_cache_lock = threading.RLock()
         self._ai_semaphore = threading.BoundedSemaphore(3)
+        self._ai_polling_index = 0
         self._translation_cache: dict[str, tuple[float, str]] = {}
         self._translation_cache_lock = threading.RLock()
         self.load()
@@ -640,6 +769,56 @@ class StateStore:
             self.words[word] = normalize_record(word, rec)
             self._save_locked()
 
+    def adopt_translation(self, value: Any, meaning: Any, candidates: Any = ()) -> dict[str, Any]:
+        word = normalize_word(value)
+        chosen = str(meaning or '').strip()
+        if not word or not chosen:
+            return {}
+        with self.lock:
+            rec = self.words.get(word)
+            if not rec:
+                return {}
+            all_meanings = list(dict.fromkeys(
+                str(item).strip() for item in [*candidates, *rec.get('translations', [])]
+                if str(item).strip()))
+            if chosen not in all_meanings:
+                return {}
+            rec['translations'] = [chosen, *(item for item in all_meanings if item != chosen)]
+            rec['updatedAt'] = utc_now()
+            self.words[word] = normalize_record(word, rec)
+            self._save_locked()
+            return deep_copy(self.words[word])
+
+    def change_translation(self, value: Any, position: int, candidates: Any,
+                           new_meaning: Any = None) -> dict[str, Any]:
+        """Edit or remove one candidate; permit only later appends to the snapshot."""
+        word = normalize_word(value)
+        snapshot = list(candidates) if isinstance(candidates, (list, tuple)) else []
+        new = None if new_meaning is None else str(new_meaning).strip()
+        if (not word or type(position) is not int or position < 0
+                or position >= len(snapshot) or new == ''):
+            return {}
+        with self.lock:
+            current = self.words.get(word)
+            if not current or current.get('translations', [])[:len(snapshot)] != snapshot:
+                return {}
+            previous = deep_copy(current)
+            rec = deep_copy(current)
+            meanings = list(rec['translations'])
+            if new is None or (new != meanings[position] and new in meanings):
+                meanings.pop(position)
+            else:
+                meanings[position] = new
+            rec['translations'] = meanings
+            rec['updatedAt'] = utc_now()
+            self.words[word] = normalize_record(word, rec)
+            try:
+                self._save_locked()
+            except Exception:
+                self.words[word] = previous
+                raise
+            return deep_copy(self.words[word])
+
     def remove_translation(self, value: Any, translation: Any) -> None:
         word, text = normalize_word(value), str(translation or '')
         with self.lock:
@@ -701,28 +880,67 @@ class StateStore:
 
     def clear_words(self) -> None:
         with self.lock:
+            previous_words = self.words
             self.words = {}
-            self._save_locked()
+            try:
+                self._save_locked()
+            except Exception:
+                self.words = previous_words
+                raise
 
-    def restore_words(self, data: Any, merge: bool = True) -> int:
-        if isinstance(data, dict) and isinstance(data.get('words'), dict):
-            data = data['words']
+    def trim_sentences(self, keep_count: int) -> int:
+        if isinstance(keep_count, bool) or not isinstance(keep_count, int) or not 0 <= keep_count <= 20:
+            raise ValueError('每个词保留的例句数量必须在 0 到 20 之间')
+        with self.lock:
+            updated = dict(self.words)
+            removed = 0
+            for word, record in self.words.items():
+                sentences = record.get('sentences')
+                if isinstance(sentences, list) and len(sentences) > keep_count:
+                    changed = dict(record)
+                    changed['sentences'] = sentences[:keep_count]
+                    changed['updatedAt'] = utc_now()
+                    updated[word] = changed
+                    removed += len(sentences) - keep_count
+            if not removed:
+                return 0
+            previous_words = self.words
+            self.words = updated
+            try:
+                self._save_locked()
+            except Exception:
+                self.words = previous_words
+                raise
+            return removed
+
+    def _stage_words_locked(self, data: Any, merge: bool) -> tuple[dict[str, Any], int]:
         if isinstance(data, list):
             data = {normalize_word(x.get('word') if isinstance(x, dict) else x): x for x in data}
         if not isinstance(data, dict):
             raise ValueError('未找到可导入的词汇记录')
         changed = 0
+        next_words = deep_copy(self.words) if merge else {}
+        for key, raw in data.items():
+            word = normalize_word(key or (raw or {}).get('word') if isinstance(raw, dict) else key)
+            if not word:
+                continue
+            incoming = normalize_record(word, raw if isinstance(raw, dict) else {'word': word, 'status': 5})
+            next_words[word] = merge_records(next_words[word], incoming, word) if merge and word in next_words else incoming
+            changed += 1
+        return next_words, changed
+
+    def restore_words(self, data: Any, merge: bool = True) -> int:
         with self.lock:
-            if not merge:
-                self.words = {}
-            for key, raw in data.items():
-                word = normalize_word(key or (raw or {}).get('word') if isinstance(raw, dict) else key)
-                if not word:
-                    continue
-                incoming = normalize_record(word, raw if isinstance(raw, dict) else {'word': word, 'status': 5})
-                self.words[word] = merge_records(self.words.get(word), incoming, word) if merge and word in self.words else incoming
-                changed += 1
-            self._save_locked()
+            source = data
+            if isinstance(data, dict) and 'words' in data and not is_word_record_shape(data['words']):
+                source = data['words']
+            next_words, changed = self._stage_words_locked(source, merge)
+            original_words, self.words = self.words, next_words
+            try:
+                self._save_locked()
+            except Exception:
+                self.words = original_words
+                raise
         return changed
 
     def import_data(self, payload: Any, merge: bool = True, plain_status: int = 5) -> int:
@@ -730,12 +948,152 @@ class StateStore:
             text = payload.strip()
             try:
                 payload = json.loads(text)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as error:
+                if text.startswith(('{', '[')):
+                    raise ValueError('备份 JSON 格式无效') from error
                 words = [x.strip() for x in re.split(r'[\r\n,;]+', text) if x.strip()]
                 payload = {normalize_word(w): {'word': normalize_word(w), 'term': w, 'status': plain_status} for w in words}
-        if isinstance(payload, dict) and isinstance(payload.get('storage'), dict):
-            self.storage_set(payload['storage'])
-        return self.restore_words(payload, merge=merge)
+        with self.lock:
+            envelope = isinstance(payload, dict) and (
+                str(payload.get('format') or '').startswith('lingkuma-')
+                or 'words' in payload and not is_word_record_shape(payload['words'])
+                or 'storage' in payload and not is_word_record_shape(payload['storage'])
+                or 'progress' in payload and not is_word_record_shape(payload['progress'])
+            )
+            if envelope and 'words' not in payload:
+                raise ValueError('未找到可导入的词汇记录')
+            source = payload['words'] if envelope else payload
+            next_words, changed = self._stage_words_locked(source, merge)
+            if not merge and not changed:
+                raise ValueError('替换备份中没有有效词汇记录；请使用“清空词库”单独清空')
+            incoming_storage = payload.get('storage') if envelope else None
+            if incoming_storage is not None and not isinstance(incoming_storage, dict):
+                raise ValueError('备份设置格式无效')
+            has_progress = envelope and 'progress' in payload
+            incoming_progress = payload['progress'] if has_progress else None
+            if has_progress:
+                if not isinstance(incoming_progress, dict):
+                    raise ValueError('备份阅读进度格式无效')
+                for book, position in incoming_progress.items():
+                    if (not isinstance(book, str) or not book or
+                        not isinstance(position, dict) or
+                        not isinstance(position.get('chapter'), int) or
+                        isinstance(position['chapter'], bool) or position['chapter'] < 0 or
+                        not isinstance(position.get('scrollRatio'), (int, float)) or
+                        isinstance(position['scrollRatio'], bool) or
+                        not math.isfinite(position['scrollRatio']) or
+                        not 0 <= position['scrollRatio'] <= 1 or
+                        ('updatedAt' in position and not isinstance(position['updatedAt'], str))):
+                        raise ValueError('备份阅读进度格式无效')
+            next_progress = ({**deep_copy(self.progress), **deep_copy(incoming_progress)} if merge
+                             else deep_copy(incoming_progress)) if has_progress else self.progress
+            original_storage, original_words, original_progress = self.storage, self.words, self.progress
+            try:
+                if incoming_storage is not None:
+                    self.storage = deep_copy(self.storage)
+                    for key, value in incoming_storage.items():
+                        self.storage[str(key)] = deep_copy(value)
+                    self._synchronize_config_locked(incoming_storage)
+                self.words = next_words
+                self.progress = next_progress
+                self._save_locked()
+            except Exception:
+                self.storage, self.words, self.progress = original_storage, original_words, original_progress
+                raise
+            return changed
+
+    def import_webdav_learning_data(self, payload: Any, *, merge: bool = True) -> int:
+        """Import a remote word backup without accepting host settings or progress."""
+        if not isinstance(payload, dict):
+            raise ValueError('远端备份格式无效')
+        source = payload
+        for key in ('words', 'wordDetails', 'vocabulary', 'data'):
+            if key in payload and not is_word_record_shape(payload[key]):
+                source = payload[key]
+                break
+        if not isinstance(source, dict) or not source:
+            raise ValueError('远端备份中没有有效词汇记录')
+        words = {}
+        for key, raw in source.items():
+            if not isinstance(raw, dict) or not is_word_record_shape(raw):
+                raise ValueError('远端词汇记录格式无效')
+            word = normalize_word(key or raw.get('word') or raw.get('term'))
+            if not word:
+                raise ValueError('远端词汇记录格式无效')
+            words[word] = _portable_word_record(normalize_record(word, raw))
+        return self.import_data({'words': words}, merge=merge)
+
+    def import_words_only(self, payload: str, *, merge: bool = True,
+                          language: str = 'en', status: str = '5') -> int:
+        """Import learning records without accepting backup settings or credentials."""
+        language = str(language).strip().lower()
+        status = str(status)
+        if not re.fullmatch(r'[a-z]{2}', language):
+            raise ValueError('纯词表语言必须是两个英文字母')
+        if status not in {'0', '1', '2', '3', '4', '5'}:
+            raise ValueError('纯词表状态必须在 0 到 5 之间')
+        text = str(payload).strip()
+        if not text:
+            raise ValueError('请先选择文件或粘贴词汇数据')
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as error:
+            if text.startswith(('{', '[')):
+                raise ValueError('词汇 JSON 格式无效') from error
+            parsed = [item.strip() for item in re.split(r'[\r\n,;]+', text) if item.strip()]
+        if (isinstance(parsed, dict) and 'words' in parsed
+                and (str(parsed.get('format') or '').startswith('lingkuma-')
+                     or not is_word_record_shape(parsed['words']))):
+            source = parsed['words']
+            if not isinstance(source, (dict, list)) or not source:
+                raise ValueError('未找到可导入的词汇记录')
+            records = {}
+            if isinstance(source, dict):
+                entries = source.items()
+            else:
+                entries = []
+                for item in source:
+                    if isinstance(item, str):
+                        entries.append((item, {'word': item, 'term': item,
+                                               'language': language, 'status': status}))
+                    elif isinstance(item, dict):
+                        key = item.get('word') or item.get('term') or item.get('value')
+                        entries.append((key, {'word': key, **item}))
+                    else:
+                        raise ValueError('词汇备份包含无效记录；未导入数据')
+            for key, raw in entries:
+                word = normalize_word(key)
+                if not word or not isinstance(raw, dict) or not is_word_record_shape(raw):
+                    raise ValueError('词汇备份包含无效记录；未导入数据')
+                records[word] = _portable_word_record(normalize_record(word, raw))
+            return self.restore_words(records, merge=merge)
+        if isinstance(parsed, dict):
+            for key in ('words', 'wordDetails', 'vocabulary', 'data'):
+                if key in parsed and not is_word_record_shape(parsed[key]):
+                    parsed = parsed[key]
+                    break
+        if isinstance(parsed, list):
+            records = {}
+            for item in parsed:
+                if isinstance(item, str):
+                    word = normalize_word(item)
+                    raw = {'word': word, 'term': item, 'language': language, 'status': status}
+                elif isinstance(item, dict):
+                    word = normalize_word(item.get('word') or item.get('term') or item.get('value'))
+                    raw = item
+                else:
+                    continue
+                if word:
+                    records[word] = raw
+        elif isinstance(parsed, dict):
+            records = {normalize_word(key): raw for key, raw in parsed.items()
+                       if normalize_word(key) and isinstance(raw, dict)
+                       and any(field in raw for field in ('word', 'term', 'status', 'translations', 'tags', 'sentences'))}
+        else:
+            records = {}
+        if not records:
+            raise ValueError('未找到可导入的词汇记录')
+        return self.restore_words(records, merge=merge)
 
     def export_data(self) -> dict[str, Any]:
         with self.lock:
@@ -747,6 +1105,19 @@ class StateStore:
                 'storage': deep_copy(self.storage),
                 'words': deep_copy(self.words),
                 'progress': deep_copy(self.progress),
+            }
+
+    def export_learning_data(self) -> dict[str, Any]:
+        """Portable learning records; host settings stay in the full backup."""
+        with self.lock:
+            return {
+                'format': 'lingkuma-calibre-learning-export',
+                'version': 1,
+                'exportedAt': utc_now(),
+                'words': {
+                    word: _portable_word_record(record)
+                    for word, record in self.words.items()
+                },
             }
 
     def get_progress(self, book_key: str) -> dict[str, Any]:
@@ -773,21 +1144,72 @@ class StateStore:
             for key in DEFAULT_AI_KEYS_B64
         ]
 
-    def effective_ai_config(self) -> dict[str, Any]:
-        ai = self.storage.get('aiConfig') or {}
-        if str(ai.get('apiBaseURL') or '').strip():
-            return {
-                'apiBaseURL': str(ai.get('apiBaseURL')).strip(),
-                'apiModel': str(ai.get('apiModel') or '').strip(),
-                'apiKey': str(ai.get('apiKey') or '').strip(),
-                'temperature': float(ai.get('apiTemperature', 1)),
-                'source': 'custom',
-            }
-        config = self.ai_configs()[0]
-        return {**config, 'temperature': 1.0}
+    def effective_ai_config(self, *, advance_polling: bool = False) -> dict[str, Any]:
+        with self.lock:
+            ai = self.storage.get('aiConfig') or {}
+            container = self.storage.get('customApiProfiles')
+            profile = None
+            if isinstance(container, dict) and isinstance(container.get('profiles'), list):
+                profiles = [item for item in container['profiles'][:20] if isinstance(item, dict)]
+                active_id = str(container.get('activeProfileId') or '')
+                profile = next((item for item in profiles if str(item.get('id') or '') == active_id), None)
+                if profile is None and profiles:
+                    profile = profiles[0]
+                if ai.get('enableApiPolling') is True:
+                    enabled = [item for item in profiles if item.get('enablePolling') is True
+                               and str(item.get('apiBaseURL') or '').strip()]
+                    if enabled:
+                        profile = enabled[self._ai_polling_index % len(enabled)]
+                        if advance_polling:
+                            self._ai_polling_index = (self._ai_polling_index + 1) % len(enabled)
+            if profile and str(profile.get('apiBaseURL') or '').strip():
+                try:
+                    temperature = float(profile.get('apiTemperature', 1))
+                except (TypeError, ValueError):
+                    temperature = 1.0
+                if not math.isfinite(temperature):
+                    temperature = 1.0
+                return {
+                    'apiBaseURL': str(profile['apiBaseURL']).strip(),
+                    'apiModel': str(profile.get('apiModel') or '').strip(),
+                    'apiKey': str(profile.get('apiKey') or '').strip(),
+                    'temperature': max(0, min(2, temperature)),
+                    'excludeTemperature': profile.get('excludeTemperature') is True,
+                    'customRequestBody': str(profile.get('customRequestBody') or ''),
+                    'source': 'custom',
+                }
+            if str(ai.get('apiBaseURL') or '').strip():
+                return {
+                    'apiBaseURL': str(ai.get('apiBaseURL')).strip(),
+                    'apiModel': str(ai.get('apiModel') or '').strip(),
+                    'apiKey': str(ai.get('apiKey') or '').strip(),
+                    'temperature': float(ai.get('apiTemperature', 1)),
+                    'source': 'custom',
+                }
+            config = self.ai_configs()[0]
+            return {**config, 'temperature': 1.0}
 
     def ai_config_for_content(self) -> dict[str, Any]:
         ai = deep_copy(self.storage.get('aiConfig') or {})
+        if not str(ai.get('aiPrompt') or '').strip():
+            canonical = str(self.storage.get('aiPrompt') or '').strip()
+            native_alias = str(self.storage.get('aiTranslationPrompt') or '').strip()
+            if canonical or native_alias:
+                ai['aiPrompt'] = canonical or native_alias
+        if not str(ai.get('aiPrompt2') or '').strip():
+            canonical = str(self.storage.get('aiPrompt2') or '').strip()
+            native_alias = str(self.storage.get('aiTranslationPrompt2') or '').strip()
+            if canonical or native_alias:
+                ai['aiPrompt2'] = canonical or native_alias
+        if not str(ai.get('aiAnalysisPrompt') or '').strip():
+            canonical = str(self.storage.get('aiAnalysisPrompt') or '').strip()
+            native_alias = str(self.storage.get('aiSentenceAnalysisPrompt') or '').strip()
+            if canonical or native_alias:
+                ai['aiAnalysisPrompt'] = canonical or native_alias
+        if not str(ai.get('aiTagAnalysisPrompt') or '').strip():
+            tag_prompt = str(self.storage.get('aiTagAnalysisPrompt') or '').strip()
+            if tag_prompt:
+                ai['aiTagAnalysisPrompt'] = tag_prompt
         effective = self.effective_ai_config()
         return {
             **ai,
@@ -810,19 +1232,45 @@ class StateStore:
             pass
         return str(data.get('output_text') or '') if isinstance(data, dict) else ''
 
+    @staticmethod
+    def _parse_custom_ai_request_body(value: str) -> dict[str, Any]:
+        options = {}
+        reserved = {'__proto__', 'prototype', 'constructor', 'messages', 'model', 'stream', 'temperature'}
+        for raw_line in str(value or '').splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            key, separator, encoded = line.partition('=')
+            key = key.strip()
+            if not separator or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) or key in reserved:
+                raise ValueError(f'Invalid custom request body key: {key or line}')
+            def reject_non_json_constant(_value):
+                raise ValueError(f'Invalid custom request body value for {key}')
+            try:
+                options[key] = json.loads(encoded.strip(), parse_constant=reject_non_json_constant)
+            except (json.JSONDecodeError, ValueError) as error:
+                raise ValueError(f'Invalid custom request body value for {key}') from error
+        return options
+
     def _post_ai(self, config: dict[str, Any], request_data: dict[str, Any]) -> dict[str, Any]:
         url = str(config.get('apiBaseURL') or '').rstrip('/')
         if not url:
             raise RuntimeError('AI 服务地址为空')
+        parsed_url = urllib.parse.urlsplit(url)
+        if parsed_url.scheme not in {'http', 'https'} or not parsed_url.netloc:
+            raise ValueError('AI service URL must use HTTP or HTTPS')
         if not re.search(r'/(chat/completions|responses)$', url, re.I):
             url += '/chat/completions'
         body = {
             'model': request_data.get('model') or config.get('apiModel') or 'GLM-4-Flash',
             'messages': request_data.get('messages') or [],
             'stream': False,
-            'temperature': request_data.get('temperature', config.get('temperature', 1)),
+            'temperature': config.get('temperature', request_data.get('temperature', 1)),
         }
-        headers = {'Content-Type': 'application/json', 'User-Agent': 'LingKuma-calibre/1.0'}
+        if config.get('excludeTemperature'):
+            body.pop('temperature')
+        body.update(self._parse_custom_ai_request_body(config.get('customRequestBody', '')))
+        headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
         if config.get('apiKey'):
             headers['Authorization'] = f"Bearer {config['apiKey']}"
         req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode('utf-8'), headers=headers, method='POST')
@@ -837,7 +1285,9 @@ class StateStore:
     def _ai_cache_key(self, request_data: dict[str, Any]) -> str:
         effective = self.effective_ai_config()
         compact = {
-            'provider': [effective.get('apiBaseURL'), effective.get('apiModel'), effective.get('source')],
+            'provider': [effective.get('apiBaseURL'), effective.get('apiModel'), effective.get('apiKey'),
+                         effective.get('source'), effective.get('temperature'),
+                         effective.get('excludeTemperature'), effective.get('customRequestBody')],
             'model': request_data.get('model'),
             'messages': request_data.get('messages') or [],
             'temperature': request_data.get('temperature', 1),
@@ -908,212 +1358,11 @@ class StateStore:
         return deep_merge(DEFAULT_STORAGE['translationConfig'], self.storage.get('translationConfig') or {})
 
     @staticmethod
-    def _target_language_name(target: str) -> str:
-        value = str(target or 'zh-CN').strip() or 'zh-CN'
-        names = {
-            'zh-cn': 'Simplified Chinese', 'zh-hans': 'Simplified Chinese', 'zh': 'Chinese',
-            'zh-tw': 'Traditional Chinese', 'zh-hant': 'Traditional Chinese',
-            'en': 'English', 'en-us': 'English', 'en-gb': 'English',
-            'de': 'German', 'fr': 'French', 'es': 'Spanish', 'ja': 'Japanese',
-            'ko': 'Korean', 'ru': 'Russian', 'it': 'Italian', 'pt': 'Portuguese',
-        }
-        return names.get(value.lower(), value)
-
-    @staticmethod
-    def _source_language_hint(text: str, context: str = '') -> str:
-        """Return a conservative source-language hint for adapter-created records.
-
-        LingKuma's original AI language detector stores ISO-style source language
-        codes.  The Calibre batch translator previously defaulted every newly
-        created record to ``en``; that is wrong for CJK source text and caused
-        local TTS to request an English voice for Chinese words.  This helper is
-        intentionally conservative: Han-only text without context stays
-        ``auto`` so the content-side detector can use the surrounding sentence.
-        """
-        word = str(text or '')
-        sample = f'{word} {context or ""}'
-        if re.search(r'[\u3040-\u30ff]', sample):
-            return 'ja'
-        if re.search(r'[\uac00-\ud7af]', sample):
-            return 'ko'
-        if re.search(r'[\u0400-\u04ff]', sample):
-            return 'ru'
-        if re.search(r'[\u4e00-\u9fff]', word):
-            # Han-only tokens can be Chinese or Japanese.  Do not guess without
-            # kana/context; the language compatibility bridge resolves it from
-            # the actual sentence/page before TTS.
-            if re.search(r'[\u3040-\u30ff]', str(context or '')):
-                return 'ja'
-            return 'auto'
-        if re.search(r'[A-Za-z]', word):
-            return 'en'
-        return 'auto'
-
-    @staticmethod
-    def _source_language_name(word: str, sentence: str = '') -> str:
-        sample = f'{word or ""} {sentence or ""}'
-        if re.search(r'[\u3040-\u30ff]', sample):
-            return 'Japanese'
-        if re.search(r'[\uac00-\ud7af]', sample):
-            return 'Korean'
-        if re.search(r'[\u4e00-\u9fff]', sample):
-            return 'Chinese'
-        if re.search(r'[\u0400-\u04ff]', sample):
-            return 'Russian or another Cyrillic-script language'
-        return 'the source language used in the sentence'
-
-    @staticmethod
     def _target_for_provider(target: str, provider: str) -> str:
         value = str(target or 'zh-CN').strip()
-        lower = value.lower()
-        if provider == 'microsoft':
-            if lower in {'zh-cn', 'zh-hans', 'zh'}:
-                return 'zh-Hans'
-            if lower in {'zh-tw', 'zh-hant'}:
-                return 'zh-Hant'
+        if provider == 'microsoft' and value.lower() in {'zh-cn', 'zh-hans', 'zh'}:
+            return 'zh-Hans'
         return value or 'zh-CN'
-
-    def _retarget_plain_ai_request(self, request_data: dict[str, Any], kind: str, text: str) -> dict[str, Any]:
-        """Rewrite only a plain translation request to the configured target language.
-
-        The original LingKuma prompt text is Chinese-centric.  Calibre keeps all
-        non-translation AI prompts untouched, but when a request has already
-        been positively identified as a plain word/sentence translation we can
-        safely replace just that prompt before it reaches the AI backend.
-        """
-        target = str(self.translation_config().get('targetLanguage') or 'zh-CN').strip() or 'zh-CN'
-        language = self._target_language_name(target)
-        out = deep_copy(request_data)
-        sentence = str(request_data.get('sentence') or '').strip()
-        if kind == 'sentence':
-            user = f'Translate the following sentence into {language} ({target}). Return only the translation, with no explanation.\n\n{text}'
-        else:
-            context = f'\nContext sentence: {sentence}' if sentence else ''
-            if target.lower() in {'zh-cn', 'zh-hans', 'zh'}:
-                user = (
-                    f'Translate the word or short expression "{text}" into {language} ({target}) according to context. '
-                    f'Return only a concise translation, with no explanation.{context}'
-                )
-            else:
-                user = (
-                    f'Translate the word or short expression "{text}" into natural {language} ({target}) as it is used in context. '
-                    'Preserve the contextual grammatical meaning, but do not mechanically copy the source-language morphology or invent an unnatural calque. '
-                    f'Return only one concise, dictionary-quality target-language equivalent, with no explanation.{context}'
-                )
-        out['messages'] = [
-            {'role': 'system', 'content': 'You are a precise translation engine. Return only the requested translation.'},
-            {'role': 'user', 'content': user},
-        ]
-        out['_skipTranslationRouting'] = True
-        return out
-
-    def _context_explanation_request(self, request_data: dict[str, Any]) -> tuple[str, str] | None:
-        """Identify LingKuma's default second/contextual word explanation prompt.
-
-        This is intentionally narrow.  The upstream prompt asks for a concise
-        grammar/morphology explanation in Chinese, so non-Chinese target
-        languages need a language-layer rewrite.  User-supplied aiPrompt2 is
-        left untouched.
-        """
-        ai_config = self.storage.get('aiConfig') or {}
-        if isinstance(ai_config, dict) and str(ai_config.get('aiPrompt2') or '').strip():
-            return None
-        word = str(request_data.get('word') or '').strip()
-        sentence = str(request_data.get('sentence') or '').strip()
-        if not word or not sentence:
-            return None
-        messages = request_data.get('messages') or []
-        prompt = '\n'.join(str(item.get('content') or '') for item in messages if isinstance(item, dict))
-        markers = ('语法解析专家', '具体语法作用', '形变规则', '返回20字左右精要解析', '待解析词')
-        if sum(marker in prompt for marker in markers) >= 3:
-            return (word, sentence)
-        return None
-
-    def _retarget_context_explanation_request(self, request_data: dict[str, Any], word: str, sentence: str) -> dict[str, Any]:
-        """Retarget only the default contextual explanation to targetLanguage.
-
-        No upstream UI or analysis logic is modified; this changes only the
-        language of the backend response generated for the second AI capsule.
-        """
-        target = str(self.translation_config().get('targetLanguage') or 'zh-CN').strip() or 'zh-CN'
-        if target.lower() in {'zh-cn', 'zh-hans', 'zh'}:
-            return request_data
-        language = self._target_language_name(target)
-        out = deep_copy(request_data)
-        user = (
-            f'Analyze the word or expression "{word}" in the following sentence. '
-            'Briefly explain its grammatical role and, when relevant, its inflection, conjugation, or morphological form. '
-            f'Respond ONLY in concise natural {language} ({target}), in about one short sentence. '
-            'Do not translate the whole sentence and do not add headings.\n\n'
-            f'Sentence: {sentence}\nWord: {word}'
-        )
-        out['messages'] = [
-            {'role': 'system', 'content': f'You are a concise language-learning grammar assistant. Answer in {language} ({target}).'},
-            {'role': 'user', 'content': user},
-        ]
-        out['_skipTranslationRouting'] = True
-        return out
-
-    def _tag_analysis_request(self, request_data: dict[str, Any]) -> tuple[str, str] | None:
-        """Identify LingKuma's built-in automatic tag-analysis request.
-
-        Custom aiTagAnalysisPrompt values are respected exactly.  Only the
-        upstream default prompt is adapted so grammatical metadata describes
-        the SOURCE word in the SOURCE language rather than the translation
-        target language.
-        """
-        ai_config = self.storage.get('aiConfig') or {}
-        if isinstance(ai_config, dict) and str(ai_config.get('aiTagAnalysisPrompt') or '').strip():
-            return None
-        word = str(request_data.get('word') or '').strip()
-        sentence = str(request_data.get('sentence') or '').strip()
-        if not word or not sentence:
-            return None
-        messages = request_data.get('messages') or []
-        prompt = '\n'.join(str(item.get('content') or '') for item in messages if isinstance(item, dict))
-        markers = ('词性(pos)', '性别(gender)', '复数形式(plural)', '变位(conjugation)', '仅返回JSON')
-        if sum(marker in prompt for marker in markers) >= 4:
-            return (word, sentence)
-        return None
-
-    def _retarget_tag_analysis_request(self, request_data: dict[str, Any], word: str, sentence: str) -> dict[str, Any]:
-        """Keep LingKuma tag metadata aligned with the SOURCE language.
-
-        Core machine keys stay ``pos/gender/plural/conjugation`` because the
-        untouched upstream UI expects them.  Extra human-readable tag labels
-        and values are requested in the same language as the source sentence.
-        Display-only localization is handled by the isolated Calibre language
-        bridge, so changing the translation target cannot mix languages in the
-        tag row.
-        """
-        source_name = self._source_language_name(word, sentence)
-        out = deep_copy(request_data)
-        user = (
-            f'Analyze the SOURCE word/expression {word!r} as used in the SOURCE sentence below. '
-            f'The source appears to be {source_name}. Do not analyze the translated equivalent. '
-            'Return ONLY one JSON object, without markdown. Use these exact technical keys when applicable: '
-            '"pos", "gender", "plural", "conjugation". '
-            'Use compact LingKuma POS codes such as n, v, adj, adv, pron, prep, det, conj, interj, num, aux, part. '
-            'For a category that does not grammatically apply, return null. In particular, Chinese verbs do not conjugate, '
-            'so "conjugation" must be null for Chinese source words. For Japanese verbs, conjugation should be the dictionary form; '
-            'for English/German/etc. verbs, use the ordinary lemma/base form. '
-            'Any EXTRA human-readable keys and their values must be written naturally in the SAME language as the SOURCE sentence '
-            'and word, not in the translation target language. Do not transliterate a Chinese word into pinyin as a conjugation.\n\n'
-            f'Source sentence: {sentence}\nSource word: {word}'
-        )
-        out['messages'] = [
-            {
-                'role': 'system',
-                'content': (
-                    'You are a precise multilingual grammar tagger. Keep technical keys in the required LingKuma format. '
-                    'Any extra human-readable tag labels and values must use the SAME language as the SOURCE text. '
-                    'Output strict JSON only.'
-                ),
-            },
-            {'role': 'user', 'content': user},
-        ]
-        out['_skipTranslationRouting'] = True
-        return out
 
     def _translation_cache_key(self, provider: str, source: str, target: str, text: str) -> str:
         raw = json.dumps([provider, source, target, text], ensure_ascii=False, separators=(',', ':'))
@@ -1297,6 +1546,140 @@ class StateStore:
             return ('word', word)
         return None
 
+    def _context_explanation_request(self, request_data: dict[str, Any]) -> tuple[str, str] | None:
+        ai = self.storage.get('aiConfig') if isinstance(self.storage.get('aiConfig'), dict) else {}
+        custom_prompts = (
+            ai.get('aiPrompt2'),
+            self.storage.get('aiPrompt2'),
+            self.storage.get('aiTranslationPrompt2'),
+        )
+        if any(str(value or '').strip() for value in custom_prompts):
+            return None
+        word = str(request_data.get('word') or '').strip()
+        sentence = str(request_data.get('sentence') or '').strip()
+        if not word or not sentence:
+            return None
+        messages = request_data.get('messages') or []
+        prompt = '\n'.join(str(item.get('content') or '') for item in messages if isinstance(item, dict))
+        markers = ('语法解析专家', '具体语法作用', '形变规则', '返回20字左右精要解析', '待解析词')
+        return (word, sentence) if sum(marker in prompt for marker in markers) >= 3 else None
+
+    @staticmethod
+    def _target_language_name(target: str) -> str:
+        normalized = str(target or 'zh-CN').strip().replace('_', '-') or 'zh-CN'
+        lowered = normalized.lower()
+        base = lowered.split('-', 1)[0]
+        if lowered in {'zh-tw', 'zh-hk', 'zh-hant'}:
+            return f'Traditional Chinese ({normalized})'
+        names = {
+            'zh': 'Chinese',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'en': 'English',
+            'de': 'German',
+            'fr': 'French',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+        }
+        return f'{names.get(base, normalized)} ({normalized})'
+
+    def _retarget_context_explanation_request(self, request_data: dict[str, Any]) -> dict[str, Any]:
+        item = self._context_explanation_request(request_data)
+        if not item:
+            return request_data
+        target = str(self.translation_config().get('targetLanguage') or 'zh-CN').strip().replace('_', '-')
+        if target.lower() in {'zh', 'zh-cn', 'zh-hans'}:
+            return request_data
+        word, sentence = item
+        language = self._target_language_name(target)
+        routed = deep_copy(request_data)
+        routed['messages'] = [
+            {
+                'role': 'system',
+                'content': f'You are a concise language-learning grammar assistant. Answer in {language}.',
+            },
+            {
+                'role': 'user',
+                'content': (
+                    f'Analyze the word or expression "{word}" in the following sentence. '
+                    'Briefly explain its grammatical role and, when relevant, its inflection, conjugation, '
+                    f'or morphological form. Respond ONLY in concise natural {language}, in about one short '
+                    'sentence. Do not translate the whole sentence and do not add headings.\n\n'
+                    f'Sentence: {sentence}\nWord: {word}'
+                ),
+            },
+        ]
+        return routed
+
+    @staticmethod
+    def _source_language_name(word: str, sentence: str = '', source_language: str = '') -> str:
+        sample = f'{word or ""} {sentence or ""}'
+        if re.search(r'[\u3040-\u30ff]', sample):
+            return 'Japanese'
+        if re.search(r'[\uac00-\ud7af]', sample):
+            return 'Korean'
+        if re.search(r'[\u4e00-\u9fff]', sample):
+            return 'Chinese'
+        if re.search(r'[\u0400-\u04ff]', sample):
+            return 'Russian or another Cyrillic-script language'
+        code = str(source_language or '').strip().lower().replace('_', '-').split('-', 1)[0]
+        if code in {'de', 'en', 'fr', 'es', 'it'}:
+            return {'de': 'German', 'en': 'English', 'fr': 'French',
+                    'es': 'Spanish', 'it': 'Italian'}[code]
+        return 'the source language used in the sentence'
+
+    def _tag_analysis_request(self, request_data: dict[str, Any]) -> tuple[str, str] | None:
+        ai = self.storage.get('aiConfig') if isinstance(self.storage.get('aiConfig'), dict) else {}
+        custom_prompts = (ai.get('aiTagAnalysisPrompt'), self.storage.get('aiTagAnalysisPrompt'))
+        if any(str(value or '').strip() for value in custom_prompts):
+            return None
+        word = str(request_data.get('word') or '').strip()
+        sentence = str(request_data.get('sentence') or '').strip()
+        if not word or not sentence:
+            return None
+        messages = request_data.get('messages') or []
+        prompt = '\n'.join(str(item.get('content') or '') for item in messages if isinstance(item, dict))
+        markers = ('词性(pos)', '性别(gender)', '复数形式(plural)', '变位(conjugation)', '仅返回JSON')
+        return (word, sentence) if sum(marker in prompt for marker in markers) >= 4 else None
+
+    def _retarget_tag_analysis_request(self, request_data: dict[str, Any]) -> dict[str, Any]:
+        item = self._tag_analysis_request(request_data)
+        if not item:
+            return request_data
+        word, sentence = item
+        source_name = self._source_language_name(word, sentence, request_data.get('sourceLanguage'))
+        routed = deep_copy(request_data)
+        routed['messages'] = [
+            {
+                'role': 'system',
+                'content': (
+                    'You are a precise multilingual grammar tagger. Keep technical keys in the required '
+                    'LingKuma format. Any extra human-readable tag labels and values must use the SAME '
+                    'language as the SOURCE text. Output strict JSON only.'
+                ),
+            },
+            {
+                'role': 'user',
+                'content': (
+                    f'Analyze the SOURCE word/expression "{word}" as used in the SOURCE sentence below. '
+                    f'The source appears to be {source_name}. Do not analyze the translated equivalent. '
+                    'Return ONLY one JSON object, without markdown. Use these exact technical keys when '
+                    'applicable: "pos", "gender", "plural", "conjugation". Use compact LingKuma POS codes '
+                    'such as n, v, adj, adv, pron, prep, det, conj, interj, num, aux, part. For a category '
+                    'that does not grammatically apply, return null. In particular, Chinese verbs do not '
+                    'conjugate, so "conjugation" must be null for Chinese source words. For Japanese verbs, '
+                    'conjugation should be the dictionary form; for English/German/etc. verbs, use the '
+                    'ordinary lemma/base form. Any EXTRA human-readable keys and their values must be written '
+                    'naturally in the SAME language as the SOURCE sentence and word, not in the translation '
+                    'target language. Do not transliterate a Chinese word into pinyin as a conjugation.\n\n'
+                    f'Source sentence: {sentence}\nSource word: {word}'
+                ),
+            },
+        ]
+        return routed
+
     @staticmethod
     def _openai_text_response(text: str) -> dict[str, Any]:
         return {
@@ -1350,9 +1733,7 @@ class StateStore:
             for word in requested:
                 rec = self.words.get(word)
                 existing = rec.get('translations', []) if rec else []
-                target_value = str(config.get('targetLanguage') or 'zh-CN').strip() or 'zh-CN'
-                target_is_default_chinese = target_value.lower() in {'zh-cn', 'zh-hans', 'zh'}
-                if (not existing or not target_is_default_chinese or word in _CALIBRE_SENTENCE_REFRESH_WORDS or
+                if (not existing or word in _CALIBRE_SENTENCE_REFRESH_WORDS or
                         _looks_like_legacy_sentence_translation(word, existing)):
                     refresh_words.append(word)
         if refresh_words and provider != 'lingkuma-ai':
@@ -1372,19 +1753,10 @@ class StateStore:
         # Preserve the previous AI fallback only for words that actually have no
         # stored meaning.  A provider outage must not replace valid user data or
         # trigger expensive AI calls for the entire sentence.
-        target_value = str(config.get('targetLanguage') or 'zh-CN').strip() or 'zh-CN'
-        target_is_default_chinese = target_value.lower() in {'zh-cn', 'zh-hans', 'zh'}
-        if provider == 'lingkuma-ai' and not target_is_default_chinese:
-            ai_candidates = requested
-        elif translator_error is not None and not target_is_default_chinese and bool(config.get('fallbackToAI', True)):
-            ai_candidates = refresh_words
-        else:
-            ai_candidates = missing
-        fallback_words = [word for word in ai_candidates if word not in parsed]
+        fallback_words = [word for word in missing if word not in parsed]
         if fallback_words:
-            target_name = self._target_language_name(target_value)
             prompt = (
-                f'Translate each listed English word into concise {target_name} ({target_value}) according to the sentence context. '
+                'Translate each listed English word into concise Simplified Chinese according to the sentence context. '
                 'Also give a compact English part-of-speech label such as n, v, adj, adv, prep, pron, det, conj. '
                 'Return ONLY a JSON object whose keys exactly match the listed lowercase words and whose values are '
                 'objects with keys "translation" and "pos". Do not omit function words.\n\n'
@@ -1420,7 +1792,7 @@ class StateStore:
                 if fresh_translation and not existing:
                     rec = rec or fresh_record(word, word)
                     rec['status'] = '1' if rec.get('status') in {None, '', '0', 0} else normalize_status(rec.get('status'))
-                    rec['language'] = rec.get('language') if rec.get('language') not in {None, '', 'auto'} else self._source_language_hint(word, sentence_text)
+                    rec['language'] = rec.get('language') if rec.get('language') not in {None, '', 'auto'} else 'en'
                     rec.setdefault('translations', []).append(fresh_translation)
                     pos = str(item.get('pos') or '').strip()
                     if pos:
@@ -1439,7 +1811,7 @@ class StateStore:
                     # repair: the sentence panel no longer renders poisoned
                     # historical translations such as "中文翻译" prompt fragments.
                     display['translations'] = [fresh_translation]
-                    display['language'] = display.get('language') if display.get('language') not in {None, '', 'auto'} else self._source_language_hint(word, sentence_text)
+                    display['language'] = display.get('language') if display.get('language') not in {None, '', 'auto'} else 'en'
                     translations[word] = fresh_translation
                 elif existing:
                     translations[word] = str(existing[0])
@@ -1459,37 +1831,27 @@ class StateStore:
         if not request_data.get('_skipTranslationRouting'):
             plain = self._plain_translation_request(request_data)
             provider = str(self.translation_config().get('provider') or 'google-web').strip().lower()
-            if plain:
+            if plain and provider != 'lingkuma-ai':
                 kind, text = plain
-                if provider != 'lingkuma-ai':
-                    try:
-                        started = time.monotonic()
-                        translated = self.translate_texts([text], source='auto')[0]
-                        elapsed = round((time.monotonic() - started) * 1000, 1)
-                        print(f'[LingKuma calibre {VERSION_STR}] fast {kind} translation via {provider} in {elapsed} ms')
-                        return self._openai_text_response(translated)
-                    except Exception as error:
-                        print(f'[LingKuma calibre {VERSION_STR}] fast translation failed: {error}')
-                        if not bool(self.translation_config().get('fallbackToAI', True)):
-                            raise
-                # LingKuma AI, or the AI fallback after a dedicated translator
-                # failed, must honor the same targetLanguage instead of the
-                # Chinese wording embedded in the original upstream prompt.
-                request_data = self._retarget_plain_ai_request(request_data, kind, text)
-            else:
-                contextual = self._context_explanation_request(request_data)
-                if contextual:
-                    word, sentence = contextual
-                    request_data = self._retarget_context_explanation_request(request_data, word, sentence)
-                else:
-                    tag_analysis = self._tag_analysis_request(request_data)
-                    if tag_analysis:
-                        word, sentence = tag_analysis
-                        request_data = self._retarget_tag_analysis_request(request_data, word, sentence)
+                try:
+                    started = time.monotonic()
+                    translated = self.translate_texts([text], source='auto')[0]
+                    elapsed = round((time.monotonic() - started) * 1000, 1)
+                    print(f'[LingKuma calibre {VERSION_STR}] fast {kind} translation via {provider} in {elapsed} ms')
+                    return self._openai_text_response(translated)
+                except Exception as error:
+                    print(f'[LingKuma calibre {VERSION_STR}] fast translation failed: {error}')
+                    if not bool(self.translation_config().get('fallbackToAI', True)):
+                        raise
 
-        cached = self._cached_ai(request_data)
-        if cached is not None:
-            return cached
+        request_data = self._retarget_context_explanation_request(request_data)
+        request_data = self._retarget_tag_analysis_request(request_data)
+        with self.lock:
+            polling_enabled = (self.storage.get('aiConfig') or {}).get('enableApiPolling') is True
+        if not polling_enabled:
+            cached = self._cached_ai(request_data)
+            if cached is not None:
+                return cached
         started = time.monotonic()
         concurrency = max(1, min(8, int(self.storage.get('calibreAIConcurrency') or 3)))
         if getattr(self, '_ai_semaphore_limit', None) != concurrency:
@@ -1498,10 +1860,11 @@ class StateStore:
                     self._ai_semaphore = threading.BoundedSemaphore(concurrency)
                     self._ai_semaphore_limit = concurrency
         with self._ai_semaphore:
-            cached = self._cached_ai(request_data)
-            if cached is not None:
-                return cached
-            custom = self.effective_ai_config()
+            if not polling_enabled:
+                cached = self._cached_ai(request_data)
+                if cached is not None:
+                    return cached
+            custom = self.effective_ai_config(advance_polling=polling_enabled)
             if custom.get('source') == 'custom':
                 response = self._post_ai(custom, request_data)
             else:
@@ -1517,7 +1880,8 @@ class StateStore:
                         last_error = err
                 if response is None:
                     raise RuntimeError(f'LingKuma 内置免费 AI 当前不可用：{last_error or "所有公共密钥均请求失败"}')
-            self._remember_ai(request_data, response)
+            if not polling_enabled:
+                self._remember_ai(request_data, response)
             elapsed = round((time.monotonic() - started) * 1000, 1)
             print(f'[LingKuma calibre {VERSION_STR}] AI request completed in {elapsed} ms')
             return response
@@ -1529,6 +1893,10 @@ class StateStore:
             return ''
         try:
             parsed = urllib.parse.urlparse(url)
+            # Each Calibre reader has its own loopback server port. The upstream
+            # hostname key would merge every open book into 127.0.0.1.
+            if parsed.hostname in {'127.0.0.1', 'localhost'} and parsed.port:
+                return str(parsed.netloc).lower()
             return str(parsed.hostname or parsed.netloc or url).lower()
         except Exception:
             return ''
@@ -1540,11 +1908,9 @@ class StateStore:
             overrides = self.storage.get('wordHighlightPageTabOverrides')
             overrides = overrides if isinstance(overrides, dict) else {}
             page_key = self._highlight_page_key(message)
-            tab_key = str(message.get('_calibreTabId') or '')
-            if page_key and page_key in overrides:
-                page_enabled = overrides.get(page_key) is True
-            else:
-                page_enabled = bool(tab_key and overrides.get(tab_key) is True)
+            # Every Calibre reader formerly reported tabID=1. Only its unique
+            # loopback host:port is a safe page identity.
+            page_enabled = bool(page_key and overrides.get(page_key) is True)
             enabled = page_enabled if scope == 'page' else global_enabled
             return {'scope': scope, 'enabled': enabled, 'globalEnabled': global_enabled}
 
@@ -1552,16 +1918,14 @@ class StateStore:
         with self.lock:
             raw = self.storage.get('wordHighlightPageTabOverrides')
             overrides = deep_copy(raw if isinstance(raw, dict) else {})
-        page_key = self._highlight_page_key(message)
-        tab_key = str(message.get('_calibreTabId') or '')
-        if tab_key:
-            overrides.pop(tab_key, None)
-        if enabled and page_key:
-            overrides[page_key] = True
-        elif page_key:
-            overrides.pop(page_key, None)
-        changes = self.storage_set({'wordHighlightPageTabOverrides': overrides})
-        return self._highlight_control_state(message), changes
+            page_key = self._highlight_page_key(message)
+            if enabled and page_key:
+                overrides[page_key] = True
+            elif page_key:
+                overrides.pop(page_key, None)
+            # Hold the reentrant lock across the complete read-modify-save.
+            changes = self.storage_set({'wordHighlightPageTabOverrides': overrides})
+            return self._highlight_control_state(message), changes
 
     def handle_message(self, message: dict[str, Any]) -> dict[str, Any]:
         action = message.get('action')

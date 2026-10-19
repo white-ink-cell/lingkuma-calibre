@@ -78,21 +78,28 @@ LingKuma는 아직 배우고 있는 언어로 된 콘텐츠를 읽을 수 있도
 Calibre 포팅 버전에는 다음과 같은 기능이 추가되었습니다:
 
 - Calibre / Qt WebEngine 실행 환경 대응
-- EPUB 및 PDF 읽기 환경에서 문장 선택 개선
+- EPUB 읽기 환경에서 문장 선택 개선
 - 일본어 및 한국어 짧은 문장 인식 지원
 - Calibre와 호환되는 반투명 유리 효과
 - 다국어 번역 및 AI 출력 지원
 - Calibre 읽기 환경과의 통합
 
+## 버전 1.1.2
+
+- Calibre EPUB 리더에서 LingKuma 1.1.1의 읽기 기능을 유지하면서 설정, 언어 선택, 단어장, 읽기 보조 기능을 추가했습니다.
+- 영어 단어 검색에는 로컬 사전, 번역/API, 선택적 AI 상세 설명이 있으며 뜻을 확인하고 수정할 수 있습니다.
+- 로컬, Edge, GPT TTS에 설정과 미리 듣기 기능이 있습니다. Windows 사용자가 미국·영국 음성과 중지 동작을 확인했습니다. 유료 GPT 음성 서비스는 실제 호출로 검증하지 않았습니다.
+- 변경 사항과 검증 범위는 [CHANGELOG.md](../CHANGELOG.md)를 참조하세요.
+
 ## 설치
 
-1. **GitHub Releases**에서 `lingkuma-calibre-1.0.zip`을 다운로드합니다.
+1. **GitHub Releases**에서 `lingkuma-calibre-1.1.2.zip`을 다운로드합니다.
 2. **Calibre → 환경 설정 → 플러그인**을 엽니다.
 3. **파일에서 플러그인 불러오기**를 선택합니다.
-4. 다운로드한 `lingkuma-calibre-1.0.zip`을 선택합니다.
+4. 다운로드한 `lingkuma-calibre-1.1.2.zip`을 선택합니다.
 5. Calibre를 다시 시작합니다.
 
-> GitHub가 자동으로 생성하는 `Source code (zip)` 파일은 설치하지 마세요. Release에 첨부된 `lingkuma-calibre-1.0.zip` 플러그인 패키지를 사용하세요.
+> GitHub가 자동으로 생성하는 `Source code (zip)` 파일은 설치하지 마세요. Release에 첨부된 `lingkuma-calibre-1.1.2.zip` 플러그인 패키지를 사용하세요.
 
 ## 다른 버전
 
@@ -101,9 +108,9 @@ Calibre 포팅 버전에는 다음과 같은 기능이 추가되었습니다:
 
 ## 지원 환경
 
-- Calibre 9.x
-- EPUB 및 PDF 읽기
-- Windows / macOS / Linux
+- Windows x64 지원. 최소 요구 버전은 Calibre 9.16이며, Calibre 9.16 / Python 3.14에서 검증했습니다.
+- EPUB 읽기 지원. 이 포팅 버전은 PDF를 자동 변환하거나 처리하지 않습니다. PDF는 원본 LingKuma 브라우저 확장으로 읽을 수 있습니다.
+- macOS 및 Linux는 이번 릴리스의 지원 대상이 아닙니다. 포함된 Edge TTS 네이티브 wheel은 Windows AMD64 / Python 3.14용입니다.
 
 ## 설정
 
@@ -116,17 +123,17 @@ LingKuma for Calibre는 로컬 상태를 Calibre 플러그인 데이터 디렉�
 ## 원본 프로젝트 및 저작자 표시
 
 - 원본 프로젝트: **LingKuma**
-- 원본 버전: **LingKuma 1.1.0**
+- 원본 버전: **LingKuma 1.1.1**
 - Calibre 포팅 버전 유지보수 및 배포: **white-ink-cell**
 
 이 저장소는 LingKuma의 비공식 Calibre 포팅 버전을 제공합니다.
 
 이 포팅 버전은 LingKuma를 Calibre의 읽기 환경에 맞게 조정하면서 원본 프로젝트의 핵심 기능, 인터페이스, 리소스 및 전체적인 디자인을 가능한 한 그대로 유지합니다. Calibre에 특화된 변경 사항은 주로 실행 환경 호환성, 문장 선택, 반투명 유리 효과 및 다국어 번역 지원에 중점을 둡니다.
 
-자세한 내용은 `UPSTREAM.md`를 참조하세요.
+자세한 내용은 [UPSTREAM.md](../UPSTREAM.md)를 참조하세요.
 
 ## 라이선스
 
 원본 LingKuma의 저작자 표시, 저작권 및 라이선스는 변경되지 않습니다.
 
-Calibre 어댑터 및 호환성 레이어에는 `LICENSE-ADAPTER.txt`의 라이선스가 적용됩니다. 원본 LingKuma 라이선스는 `LICENSE-LINGKUMA.txt`에 보존되어 있으며, 포함된 타사 라이선스 및 고지는 `THIRD-PARTY-NOTICES.txt`에 기록되어 있습니다.
+Calibre 어댑터 및 호환성 레이어에는 `licenses/LICENSE-ADAPTER.txt`의 라이선스가 적용됩니다. 원본 LingKuma 라이선스는 `LICENSE-LINGKUMA.txt`에 보존되어 있으며, 포함된 타사 라이선스 및 고지는 `THIRD-PARTY-NOTICES.txt`에 기록되어 있습니다.

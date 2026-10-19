@@ -81,21 +81,28 @@ LingKuma 帮助你阅读仍在学习中的语言内容，让你在阅读过程�
 Calibre 移植版增加了：
 
 - Calibre / Qt WebEngine 运行环境适配
-- 改进 EPUB 和 PDF 阅读中的句子选取
+- 改进 EPUB 阅读中的句子选取
 - 支持日文和韩文短句识别
 - 适用于 Calibre 的磨砂玻璃效果
 - 多语言翻译与 AI 输出支持
 - 与 Calibre 阅读环境集成
 
+## 1.1.2 版本
+
+- 在 Calibre EPUB 阅读器中保留 LingKuma 1.1.1 的阅读功能，并补齐设置、语言选择、词库管理与阅读辅助。
+- 英文查词提供本地词典、翻译/API 和可选 AI 详解；释义可由用户检查和编辑。
+- 本地、Edge、GPT TTS 均有配置和试听入口。Windows 测试者确认美音、英音及停止正常；付费 GPT 语音尚未实测。
+- 变更与验证边界见 [CHANGELOG.md](../CHANGELOG.md)。
+
 ## 安装
 
-1. 从 **GitHub Releases** 下载 `lingkuma-calibre-1.0.zip`。
+1. 从 **GitHub Releases** 下载 `lingkuma-calibre-1.1.2.zip`。
 2. 打开 **Calibre → 首选项 → 插件**。
 3. 选择 **从文件加载插件**。
-4. 选择下载的 `lingkuma-calibre-1.0.zip`。
+4. 选择下载的 `lingkuma-calibre-1.1.2.zip`。
 5. 重启 Calibre。
 
-> 不要安装 GitHub 自动生成的 `Source code (zip)`。请使用 Release 附件中的 `lingkuma-calibre-1.0.zip` 插件安装包。
+> 不要安装 GitHub 自动生成的 `Source code (zip)`。请使用 Release 附件中的 `lingkuma-calibre-1.1.2.zip` 插件安装包。
 
 ## 其他版本
 
@@ -104,9 +111,9 @@ Calibre 移植版增加了：
 
 ## 支持环境
 
-- Calibre 9.x
-- EPUB 和 PDF 阅读
-- Windows / macOS / Linux
+- 支持 Windows x64；最低要求 Calibre 9.16，已在 Calibre 9.16 / Python 3.14 上测试。
+- EPUB 阅读；此移植版不会自动转换或处理 PDF。PDF 可在浏览器中使用 LingKuma 原插件阅读。
+- macOS 和 Linux 不在本次发布的支持范围内。随包提供的 Edge TTS 原生 wheel 适用于 Windows AMD64 / Python 3.14。
 
 ## 设置
 
@@ -119,17 +126,17 @@ LingKuma for Calibre 将本地状态存储在 Calibre 插件数据目录中。�
 ## 上游项目与署名
 
 - 原项目：**LingKuma**
-- 上游版本：**LingKuma 1.1.0**
+- 上游版本：**LingKuma 1.1.1**
 - Calibre 移植版维护与发布：**white-ink-cell**
 
 本仓库提供 LingKuma 的非官方 Calibre 移植版。
 
 该移植版使 LingKuma 能够适配 Calibre 的阅读环境，同时尽可能保留原项目的核心功能、界面、资源和整体设计。针对 Calibre 的修改主要集中在运行环境兼容、句子选取、磨砂玻璃效果以及多语言翻译支持。
 
-更多信息请参阅 `UPSTREAM.md`。
+更多信息请参阅 [UPSTREAM.md](../UPSTREAM.md)。
 
 ## 许可证
 
 原 LingKuma 项目的作者署名、版权和许可证保持不变。
 
-Calibre 适配器和兼容层使用 `LICENSE-ADAPTER.txt` 中的许可证。原 LingKuma 的许可证保留在 `LICENSE-LINGKUMA.txt` 中，随项目一起提供的第三方许可证和声明记录在 `THIRD-PARTY-NOTICES.txt` 中。
+Calibre 适配器和兼容层使用 `licenses/LICENSE-ADAPTER.txt` 中的许可证。原 LingKuma 的许可证保留在 `LICENSE-LINGKUMA.txt` 中，随项目一起提供的第三方许可证和声明记录在 `THIRD-PARTY-NOTICES.txt` 中。

@@ -1,11 +1,11 @@
 # 업스트림 프로젝트 및 포팅 설명
 
-[English](UPSTREAM.md) | [简体中文](UPSTREAM_zh.md) | [日本語](UPSTREAM_ja.md) | **한국어**
+[English](../UPSTREAM.md) | [简体中文](UPSTREAM_zh.md) | [日本語](UPSTREAM_ja.md) | **한국어**
 
-이 프로젝트는 **LingKuma 1.1.0**의 비공식 Calibre 포팅 버전입니다.
+이 프로젝트는 **LingKuma 1.1.1**의 비공식 Calibre 포팅 버전입니다.
 
 - 원 프로젝트: `lingkuma/LingKuma`
-- 업스트림 버전: LingKuma 1.1.0
+- 업스트림 버전: LingKuma 1.1.1
 - Calibre 포팅 버전 유지보수 / 배포: `white-ink-cell`
 
 LingKuma 원 프로젝트의 저자 표기, 저작권, 라이선스 및 포함된 업스트림 리소스는 변경하지 않습니다.

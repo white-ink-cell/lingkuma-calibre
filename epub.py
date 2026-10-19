@@ -162,10 +162,17 @@ def _prepare_epub(source: Path, root: Path, book_key: str) -> BookPackage:
         opf_dir = ''
 
     title = source.stem
+    book_language = ''
     for node in opf_root.iter():
         if _local_name(node.tag).lower() == 'title' and _element_text(node):
             title = _element_text(node)
             break
+    for node in opf_root.iter():
+        if _local_name(node.tag).lower() == 'language' and _element_text(node):
+            candidate = _element_text(node)
+            if re.fullmatch(r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', candidate):
+                book_language = candidate
+                break
 
     manifest: dict[str, dict] = {}
     for node in opf_root.iter():
@@ -201,7 +208,7 @@ def _prepare_epub(source: Path, root: Path, book_key: str) -> BookPackage:
         chapters = _scan_html_chapters(root)
     if not chapters:
         raise ValueError('EPUB 中没有可读取的 HTML/XHTML 章节')
-    return BookPackage(title=title, root=root, chapters=chapters, book_key=book_key, source_path=source, metadata={'format': 'EPUB'})
+    return BookPackage(title=title, root=root, chapters=chapters, book_key=book_key, source_path=source, metadata={'format': 'EPUB', 'language': book_language})
 
 
 def _scan_html_chapters(root: Path) -> list[Chapter]:

@@ -17,12 +17,15 @@
     };
   }
 
-  // Keep the bootstrap storage snapshot byte-for-byte faithful to the backend.
-  // Platform emulation must not rewrite LingKuma policy/settings before upstream reads it.
+  // Keep the bootstrap storage snapshot faithful to the backend. Only the
+  // per-reader view of page overrides below maps Calibre's port to the
+  // hostname key expected by the unmodified upstream content scripts.
   const runtimeListeners = new Set();
   const storageListeners = new Set();
   let currentSpeech = null;
   let currentAudio = null;
+  let gptAudioGeneration = 0;
+  let edgeRequestId = null;
 
   function clone(value) {
     if (value === undefined) return undefined;
@@ -76,18 +79,38 @@
     }
     return promise;
   }
+  function storageViewValue(key, value) {
+    const copy = clone(value);
+    if (key !== 'wordHighlightPageTabOverrides' || !copy || typeof copy !== 'object') return copy;
+    const hostname = String(location.hostname || '').toLowerCase();
+    const host = String(location.host || '').toLowerCase();
+    if (!['127.0.0.1', 'localhost'].includes(hostname) || host === hostname) return copy;
+    // Upstream reads overrides[location.hostname]. Calibre stores each reader
+    // under its own host:port, so another open book cannot enable this one.
+    if (copy[host] === true) copy[hostname] = true;
+    else delete copy[hostname];
+    return copy;
+  }
   function getFromCache(keys) {
-    if (keys === undefined || keys === null) return clone(storageCache);
-    if (typeof keys === 'string') return { [keys]: clone(storageCache[keys]) };
+    if (keys === undefined || keys === null) {
+      const out = clone(storageCache);
+      if (Object.prototype.hasOwnProperty.call(out, 'wordHighlightPageTabOverrides')) {
+        out.wordHighlightPageTabOverrides = storageViewValue(
+          'wordHighlightPageTabOverrides', storageCache.wordHighlightPageTabOverrides);
+      }
+      return out;
+    }
+    if (typeof keys === 'string') return { [keys]: storageViewValue(keys, storageCache[keys]) };
     if (Array.isArray(keys)) {
       const out = {};
-      for (const key of keys) out[String(key)] = clone(storageCache[String(key)]);
+      for (const key of keys) out[String(key)] = storageViewValue(String(key), storageCache[String(key)]);
       return out;
     }
     if (typeof keys === 'object') {
       const out = {};
       for (const [key, fallback] of Object.entries(keys)) {
-        out[key] = Object.prototype.hasOwnProperty.call(storageCache, key) ? clone(storageCache[key]) : clone(fallback);
+        out[key] = Object.prototype.hasOwnProperty.call(storageCache, key)
+          ? storageViewValue(key, storageCache[key]) : clone(fallback);
       }
       return out;
     }
@@ -126,6 +149,42 @@
     setTimeout(() => dispatchStorage(changes), 0);
     return changes;
   }
+  function currentReaderHighlightEnabled() {
+    if (storageCache.wordHighlightFloatingButtonScope !== 'page') return storageCache.enablePlugin !== false;
+    const overrides = storageViewValue('wordHighlightPageTabOverrides', storageCache.wordHighlightPageTabOverrides) || {};
+    return overrides[String(location.hostname || '').toLowerCase()] === true;
+  }
+  let sharedHighlightSyncPending = false;
+  async function syncSharedHighlightState() {
+    if (sharedHighlightSyncPending) return;
+    sharedHighlightSyncPending = true;
+    try {
+      const keys = ['enablePlugin', 'wordHighlightFloatingButtonScope', 'wordHighlightPageTabOverrides'];
+      await enqueueStorageMutation(async () => {
+        const remote = await api('storage/get', { keys }, { attempts: 1 });
+        const beforeEnabled = currentReaderHighlightEnabled();
+        const changes = {};
+        for (const key of keys) {
+          if (JSON.stringify(storageCache[key]) !== JSON.stringify(remote[key])) {
+            changes[key] = { oldValue: clone(storageCache[key]), newValue: clone(remote[key]) };
+          }
+        }
+        if (Object.keys(changes).length) {
+          applyBackendStorageChanges(changes);
+          const enabled = currentReaderHighlightEnabled();
+          if (enabled !== beforeEnabled) dispatchRuntime({ action: 'toggleHighlight', enabled },
+            { id: runtime.id, tab: { id: tabID, url: location.href } });
+        }
+      });
+    } catch (error) {
+      console.debug('[LingKuma] shared highlight sync unavailable:', error);
+    } finally {
+      sharedHighlightSyncPending = false;
+    }
+  }
+  // Each Calibre Reader has an independent JS context. Reconcile only the
+  // three shared highlight values over the already-local loopback transport.
+  if (typeof setInterval === 'function') setInterval(syncSharedHighlightState, 750);
   function enqueueStorageMutation(work) {
     const operation = storageMutationChain.then(work, work);
     storageMutationChain = operation.catch(() => {});
@@ -137,13 +196,19 @@
     }
   }
   function languageForText(text, requested) {
-    if (requested && requested !== 'auto') return requested;
     text = String(text || '');
-    if (/[\u4e00-\u9fff]/.test(text)) return 'zh-CN';
-    if (/[\u3040-\u30ff]/.test(text)) return 'ja-JP';
-    if (/[\uac00-\ud7af]/.test(text)) return 'ko-KR';
-    if (/[\u0400-\u04ff]/.test(text)) return 'ru-RU';
-    return 'en-US';
+    const strong = /[\u3040-\u30ff]/.test(text) ? 'ja-JP'
+      : /[\uac00-\ud7af]/.test(text) ? 'ko-KR'
+        : /[\u0400-\u04ff]/.test(text) ? 'ru-RU'
+          : /[\u3400-\u4dbf\u4e00-\u9fff]/.test(text) ? 'zh-CN'
+            : null;
+    const normalizedRequested = String(requested || '').trim();
+    if (normalizedRequested && normalizedRequested !== 'auto') {
+      const requestedBase = normalizedRequested.toLowerCase().replace('_', '-').split('-')[0];
+      const strongBase = strong ? strong.toLowerCase().split('-')[0] : null;
+      return strong && requestedBase !== strongBase ? strong : normalizedRequested;
+    }
+    return strong || 'en-US';
   }
   function speakLocal(message) {
     const text = String(message.text || message.sentence || '');
@@ -166,8 +231,8 @@
     return Promise.resolve({ success: true });
   }
   function playRemoteAudio(message) {
-    const url = String(message.url || '');
-    if (!url) return speakLocal(message);
+    const url = String(message.url || message.audioUrl || message.data?.url || '');
+    if (!url) return Promise.reject(new Error('Audio URL is empty'));
     try {
       if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; }
       const audio = new Audio(url);
@@ -178,26 +243,83 @@
         if (remaining > 0) { audio.currentTime = 0; audio.play().catch(() => {}); }
       });
       currentAudio = audio;
-      audio.play().catch(error => console.warn('[LingKuma custom audio]', error));
-      return Promise.resolve({ success: true });
+      return Promise.resolve(audio.play()).then(() => ({ success: true }));
     } catch (error) {
-      console.warn('[LingKuma custom audio fallback]', error);
-      return speakLocal(message);
+      return Promise.reject(error);
     }
   }
   function playAudioMessage(message) {
-    if (message.audioType === 'playCustom' && message.url) return playRemoteAudio(message);
-    // Cloud/Edge providers require browser-extension background capabilities.
-    // In calibre, fall back to the operating-system voice rather than failing.
+    if (message.audioType !== 'playGptTTS') gptAudioGeneration++;
+    if (message.audioType === 'playEdgeTTS') {
+      stopLocalSpeech();
+      const ownGeneration = gptAudioGeneration;
+      const ownRequestId = globalThis.crypto?.randomUUID?.() ||
+        `edge_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      edgeRequestId = ownRequestId;
+      return api('tts/edge', {
+        requestId: ownRequestId,
+        text: String(message.text || message.sentence || ''),
+        voice: String(message.voice || 'en-US-AriaNeural'),
+        language: String(message.lang || message.language || 'en-US'),
+        rate: message.rate ?? 'default',
+        volume: message.volume ?? 'default',
+        pitch: message.pitch ?? 'default',
+      }, { attempts: 1 }).then(result => {
+        if (edgeRequestId === ownRequestId) edgeRequestId = null;
+        if (ownGeneration !== gptAudioGeneration) return { success: false, cancelled: true };
+        if (!result?.audioBase64 || result.mimeType !== 'audio/mpeg') throw new Error('Edge TTS returned no playable audio');
+        const audio = new Audio('data:audio/mpeg;base64,' + result.audioBase64);
+        currentAudio = audio;
+        audio.addEventListener('ended', () => {
+          if (currentAudio === audio) currentAudio = null;
+        }, { once: true });
+        return Promise.resolve(audio.play()).then(() => {
+          if (ownGeneration !== gptAudioGeneration) return { success: false, cancelled: true };
+          return { success: true };
+        });
+      }).catch(error => {
+        if (edgeRequestId === ownRequestId) edgeRequestId = null;
+        if (ownGeneration !== gptAudioGeneration) return { success: false, cancelled: true };
+        throw error;
+      });
+    }
+    if (message.audioType === 'playGptTTS') {
+      stopLocalSpeech();
+      const ownGeneration = gptAudioGeneration;
+      return api('tts/gpt', message, { attempts: 1 }).then(result => {
+        if (ownGeneration !== gptAudioGeneration) return { success: false, cancelled: true };
+        if (!result?.audioBase64 || !String(result.mimeType || '').startsWith('audio/')) {
+          throw new Error('GPT TTS returned no playable audio');
+        }
+        const audio = new Audio('data:' + result.mimeType + ';base64,' + result.audioBase64);
+        currentAudio = audio;
+        audio.addEventListener('ended', () => {
+          if (currentAudio === audio) currentAudio = null;
+        }, { once: true });
+        return Promise.resolve(audio.play()).then(() => {
+          if (ownGeneration !== gptAudioGeneration) return { success: false, cancelled: true };
+          return { success: true };
+        });
+      });
+    }
+    if (message.url || message.audioUrl || message.data?.url) return playRemoteAudio(message);
     return speakLocal(message);
   }
   function stopLocalSpeech() {
+    gptAudioGeneration++;
+    const oldEdgeRequestId = edgeRequestId;
+    edgeRequestId = null;
+    if (oldEdgeRequestId) {
+      api('tts/edge/cancel', { requestId: oldEdgeRequestId }, { attempts: 1 }).catch(() => {});
+    }
+    try { globalThis.__LINGKUMA_CALIBRE_EDGE_TTS__?.stop(); } catch (_) {}
     try { speechSynthesis.cancel(); } catch (_) {}
     try { if (currentAudio) { currentAudio.pause(); currentAudio.src = ''; } } catch (_) {}
     currentSpeech = null;
     currentAudio = null;
     return Promise.resolve({ success: true });
   }
+  globalThis.addEventListener?.('pagehide', stopLocalSpeech);
 
   // Preserve upstream getWordDetails contract while coalescing bursts from the
   // sentence card into one backend batch. No upstream cache/DOM globals are touched.
@@ -287,6 +409,17 @@
       }
       message = message || {};
       const action = message.action;
+      if (action === 'makeAIRequest' && message.requestData && !message.requestData.sourceLanguage) {
+        const data = message.requestData;
+        const sourceLanguage = globalThis.__LINGKUMA_ZOTERO_LANGUAGE_BRIDGE__?.inferSourceLanguage?.(
+          data.word, data.sentence, globalThis.document?.documentElement);
+        if (sourceLanguage) message = { ...message, requestData: { ...data, sourceLanguage } };
+      }
+      if (['lookupDictionary', 'lookupPronunciation', 'lookupAIPronunciation', 'lookupQuickContext'].includes(action)) {
+        const lookup = globalThis.__LINGKUMA_CALIBRE_LOOKUP_REQUEST__;
+        const promise = lookup ? lookup(clone(message)) : Promise.reject(new Error('LingKuma lookup is not ready'));
+        return callbackOrPromise(promise, callback);
+      }
       if (action === 'getWordDetails') {
         return callbackOrPromise(queueWordDetails(message.word), callback);
       }
@@ -324,13 +457,15 @@
         _calibreSenderUrl: location.href,
         _calibreTabId: tabID
       });
-      const promise = api('message', backendMessage).then(result => {
+      const send = () => api('message', backendMessage).then(result => {
         if (result && result._storageChanges) applyBackendStorageChanges(result._storageChanges);
         if (result && result._broadcast) {
           setTimeout(() => dispatchRuntime(result._broadcast, { id: runtime.id, tab: { id: tabID, url: location.href } }), 0);
         }
         return result;
       });
+      const highlightWrite = ['toggleWordHighlightFromFloatingButton', 'broadcastToggleHighlight', 'setGlobalWordHighlight'].includes(action);
+      const promise = highlightWrite ? enqueueStorageMutation(send) : send();
       return callbackOrPromise(promise, callback);
     },
     openOptionsPage(callback) {

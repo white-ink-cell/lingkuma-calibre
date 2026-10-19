@@ -23,6 +23,26 @@
   if (typeof originalGetSentenceForWord !== 'function') return;
   if (globalThis.__LINGKUMA_POSITIONED_SENTENCE_PATCH__?.installed) return;
 
+  // Upstream's five-character gate excludes short Japanese/Korean phrases.
+  // Keep its original threshold for every other sentence and require multiple
+  // lexical units before a shorter CJK phrase may enter Word Explosion.
+  globalThis.__LINGKUMA_CJK_SHORT_SENTENCE_ALLOWED__ = value => {
+    const sentence = String(value || '').trim();
+    if (!sentence || sentence.length >= 5 || typeof Intl === 'undefined'
+        || typeof Intl.Segmenter !== 'function') return false;
+    const locale = /\p{Script=Hangul}/u.test(sentence) ? 'ko'
+      : /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(sentence)
+        || /^ja(?:-|$)/i.test(document.documentElement?.lang || '') ? 'ja' : null;
+    if (!locale) return false;
+    try {
+      let count = 0;
+      for (const part of new Intl.Segmenter(locale, { granularity: 'word' }).segment(sentence)) {
+        if (part.isWordLike && ++count >= 2) return true;
+      }
+    } catch (_) {}
+    return false;
+  };
+
   const safeElement = node => {
     if (!node) return null;
     if (node.nodeType === Node.ELEMENT_NODE) return node;
@@ -150,10 +170,15 @@
       let position = '';
       try { position = getComputedStyle(cursor).position; } catch (_) {}
       if (position === 'absolute' || position === 'fixed') break;
-      if (isInlineLike(cursor) || textLength(cursor) < 10) continue;
+      const tag = String(cursor.tagName || '').toLowerCase();
+      const value = String(cursor.textContent || '').trim();
+      const cjkBlock = NORMAL_SENTENCE_TAGS.has(tag) && value.length < 10 && (
+        /[\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value)
+        || (/^ja(?:-|$)/i.test(document.documentElement?.lang || '')
+            && /\p{Script=Han}/u.test(value)));
+      if (isInlineLike(cursor) || (textLength(cursor) < 10 && !cjkBlock)) continue;
 
       roots.push(cursor);
-      const tag = String(cursor.tagName || '').toLowerCase();
       // Explicit paragraph/list/table/header elements are already semantic
       // sentence containers. Generic DIV wrappers are allowed to expand one or
       // two levels so inline/converted EPUB fragments cannot clip the left side.
@@ -527,6 +552,14 @@
     .replace(/[‘’]/g, "'")
     .trim();
 
+  const normalizedPrefixLength = text => String(text || '')
+    .replace(new RegExp(PARAGRAPH_SEPARATOR, 'g'), ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[*∗⁎✱✲※†‡§¶#⁰¹²³⁴⁵⁶⁷⁸⁹\d]+\s*/, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .trimStart().length;
+
   const sentenceFromBuilt = (built, kind) => {
     if (!built?.text || built.clickedOffset < 0) return null;
     const rawBounds = findSentenceBounds(built.text, built.clickedOffset);
@@ -540,7 +573,8 @@
 
     const mappedEnd = Math.min(bounds.end, bounds.start + MAX_SENTENCE_LENGTH);
     const range = createMappedRange(built.map, bounds.start, mappedEnd);
-    return { sentence, range, bounds, rawBounds, kind };
+    const clickedSurfaceStart = normalizedPrefixLength(built.text.slice(bounds.start, built.clickedOffset));
+    return { sentence, range, bounds, rawBounds, kind, clickedSurfaceStart };
   };
 
   const getNormalSentence = detail => {
@@ -592,7 +626,7 @@
       method: best.rawBounds.method || 'unknown',
       preview: best.sentence.slice(0, 180)
     };
-    return { sentence: best.sentence, range: best.range };
+    return { sentence: best.sentence, range: best.range, clickedSurfaceStart: best.clickedSurfaceStart };
   };
 
   const getPositionedSentence = detail => {
@@ -620,7 +654,7 @@
       paragraphBreaks: built.paragraphBreaks || 0,
       preview: result.sentence.slice(0, 180)
     };
-    return { sentence: result.sentence, range: result.range };
+    return { sentence: result.sentence, range: result.range, clickedSurfaceStart: result.clickedSurfaceStart };
   };
 
   const patchedGetSentenceForWord = detail => {
@@ -649,140 +683,4 @@
   };
   globalThis.getSentenceForWord = patchedGetSentenceForWord;
   try { getSentenceForWord = patchedGetSentenceForWord; } catch (_) {}
-
-  // Upstream a7 intentionally rejects sentences shorter than 5 characters.
-  // That heuristic is reasonable for alphabetic prose but rejects legitimate
-  // CJK phrases/sentences such as "赤い口紅" or "我爱你。".  Keep upstream
-  // untouched and add a narrow activation fallback only for CJK text that is
-  // shorter than the upstream threshold and contains more than one lexical
-  // unit.  Long sentences continue through upstream unchanged.
-  const CJK_SCRIPT_RE = /[\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/;
-  const CJK_PUNCT_SPACE_RE = /[\s\u3000、。，．！？!?；;：:「」『』（）()［］\[\]【】〈〉《》“”‘’…‥・,.'"-]/g;
-
-  const shortCjkLocale = text => {
-    const value = String(text || '');
-    if (/[\uac00-\ud7af]/.test(value)) return 'ko';
-    if (/[\u3040-\u30ff\u31f0-\u31ff]/.test(value)) return 'ja';
-    return 'zh';
-  };
-
-  const shortCjkCore = text => String(text || '')
-    .normalize('NFKC')
-    .replace(CJK_PUNCT_SPACE_RE, '')
-    .trim();
-
-  const shortCjkWordCount = text => {
-    const value = String(text || '').trim();
-    if (!value) return 0;
-    try {
-      if (typeof Intl?.Segmenter === 'function') {
-        const segmenter = new Intl.Segmenter(shortCjkLocale(value), { granularity: 'word' });
-        return Array.from(segmenter.segment(value)).filter(part => part && part.isWordLike).length;
-      }
-    } catch (_) {}
-    return 0;
-  };
-
-  const isEligibleShortCjkSentence = sentenceInfo => {
-    const sentence = String(sentenceInfo?.sentence || '').trim();
-    if (!sentence || sentence.length >= 5 || !CJK_SCRIPT_RE.test(sentence)) return false;
-
-    const sentenceCore = shortCjkCore(sentence);
-    if (sentenceCore.length < 2) return false;
-
-    // If the detected sentence is exactly the clicked word (ignoring CJK
-    // punctuation), it is still just a single word and should not open a
-    // sentence panel.  This also protects the fallback when Segmenter is not
-    // available.
-    const wordCore = shortCjkCore(sentenceInfo?.word || '');
-    if (wordCore && sentenceCore !== wordCore) return true;
-
-    return shortCjkWordCount(sentence) >= 2;
-  };
-
-  const isExcludedShortCjkTarget = target => {
-    if (!target) return true;
-    const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
-    if (!element) return true;
-    const tag = String(element.tagName || '').toUpperCase();
-    if (['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A', 'IMG', 'VIDEO', 'AUDIO', 'CANVAS', 'SVG'].includes(tag)) return true;
-    const selectors = [
-      '.textBasedSub', '[data-no-highlight]', '.vocab-tooltip',
-      '.custom-word-tooltip', '.custom-word-selection-popup',
-      '.custom-word-query-button', '.word-explosion-container'
-    ];
-    try {
-      return selectors.some(selector => element.matches?.(selector) || element.closest?.(selector));
-    } catch (_) {
-      return false;
-    }
-  };
-
-  const showShortCjkExplosionAt = (event, phase) => {
-    try {
-      if (!event || isExcludedShortCjkTarget(event.target)) return;
-      if (phase === 'down' && event.pointerType === 'touch') return;
-      if (phase === 'up' && event.pointerType !== 'touch') return;
-
-      // Mirror the upstream click-path gates.  The compatibility fallback must
-      // never turn a hover-only/disabled/blacklisted page into click mode.
-      try {
-        if (typeof isPluginEnabled !== 'undefined' && !isPluginEnabled) return;
-        if (typeof isInBlacklist !== 'undefined' && isInBlacklist) return;
-        if (typeof wordExplosionEnabled !== 'undefined' && !wordExplosionEnabled) return;
-        if (typeof wordExplosionConfig !== 'undefined' && wordExplosionConfig?.triggerMode !== 'click') return;
-      } catch (_) {}
-      if (globalThis.isAnalysisWindowActive) return;
-
-      const path = event.composedPath?.() || [];
-      if (path.some(node => ['lingkuma-explosion-host', 'lingkuma-tooltip-host', 'lingkuma-word-highlight-floating-root'].includes(String(node?.id || '')))) return;
-
-      const findAtPoint = globalThis.findWordAndSentenceAtPosition;
-      const showExplosion = globalThis.showWordExplosion;
-      if (typeof findAtPoint !== 'function' || typeof showExplosion !== 'function') return;
-
-      const x = Number(event.clientX || 0);
-      const y = Number(event.clientY || 0);
-      // Upstream deliberately waits 50 ms in click mode so the word tooltip can
-      // settle first. Match that ordering rather than creating a second race.
-      setTimeout(() => {
-        try {
-          const info = findAtPoint(x, y);
-          if (!isEligibleShortCjkSentence(info)) return;
-
-          let sentenceRect = null;
-          try {
-            const rectFn = globalThis.getSentenceRect;
-            if (typeof rectFn === 'function') {
-              sentenceRect = rectFn(info.sentence, {
-                textNode: info.textNode,
-                range: info.range,
-                sentenceRange: info.sentenceRange
-              });
-            }
-          } catch (_) {}
-          if (!sentenceRect) {
-            try { sentenceRect = info.sentenceRange?.getBoundingClientRect?.() || info.range?.getBoundingClientRect?.() || info.rect || null; }
-            catch (_) { sentenceRect = info.rect || null; }
-          }
-
-          console.log('[LingKumaSentencePatch] allow short CJK sentence panel:', info.sentence);
-          showExplosion(info.sentence, sentenceRect, info);
-        } catch (error) {
-          try { console.warn('[LingKumaSentencePatch] short CJK activation fallback failed', error); } catch (_) {}
-        }
-      }, 60);
-    } catch (error) {
-      try { console.warn('[LingKumaSentencePatch] short CJK activation fallback failed', error); } catch (_) {}
-    }
-  };
-
-  document.addEventListener('pointerdown', event => showShortCjkExplosionAt(event, 'down'));
-  document.addEventListener('pointerup', event => showShortCjkExplosionAt(event, 'up'));
-
-  Object.assign(globalThis.__LINGKUMA_POSITIONED_SENTENCE_PATCH__.test, {
-    isEligibleShortCjkSentence,
-    shortCjkWordCount,
-    shortCjkCore
-  });
 })();

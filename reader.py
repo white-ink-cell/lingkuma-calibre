@@ -186,7 +186,7 @@ class LingKumaReader(QMainWindow):
         # This is diagnostics only.  A delayed timer from the previous chapter can
         # otherwise fire while QWebEngine is replacing the document during fast
         # navigation/reload.  Never let diagnostics create a console error.
-        if expected_url and self.view.url().toString() != expected_url:
+        if self._shutdown_done or (expected_url and self.view.url().toString() != expected_url):
             return
         script = r"""
         (() => JSON.stringify({
@@ -291,6 +291,15 @@ class LingKumaReader(QMainWindow):
         print(f'[LingKuma calibre {VERSION_STR}] closing reader: {self.package.title!r}')
         try:
             self.ui_timer.stop()
+        except Exception:
+            pass
+        try:
+            self.page.runJavaScript(
+                "globalThis.__LINGKUMA_ZOTERO_WORD_EXPLOSION__?.cleanup?.(); "
+                "globalThis.__LINGKUMA_ZOTERO_LOOKUP_UI__?.cleanup?.(); "
+                "globalThis.chrome?.runtime?.sendMessage({action:'stopAudio'}); "
+                "globalThis.__LINGKUMA_CALIBRE_EDGE_TTS__?.cleanup?.();"
+            )
         except Exception:
             pass
         try:

@@ -24,7 +24,7 @@ from calibre_plugins.lingkuma_calibre.resource_manifest import RESOURCE_FILES
 from calibre_plugins.lingkuma_calibre.version import PRODUCT, VERSION_STR
 
 DIRECT_FORMATS = ('EPUB', 'HTMLZ', 'TXT', 'HTML', 'XHTML', 'HTM')
-CONVERSION_PRIORITY = ('AZW3', 'MOBI', 'KFX', 'FB2', 'DOCX', 'ODT', 'RTF', 'PDF')
+CONVERSION_PRIORITY = ('AZW3', 'MOBI', 'KFX', 'FB2', 'DOCX', 'ODT', 'RTF')
 
 
 class LingKumaAction(InterfaceAction):
@@ -71,7 +71,8 @@ class LingKumaAction(InterfaceAction):
         for old_runtime in runtime_base.glob('runtime-*'):
             if old_runtime != destination:
                 shutil.rmtree(old_runtime, ignore_errors=True)
-        if marker.exists():
+        if marker.exists() and all(safe_join(destination, name).is_file()
+                                   for name in RESOURCE_FILES):
             return destination / 'resources'
         if destination.exists():
             shutil.rmtree(destination, ignore_errors=True)
@@ -117,6 +118,8 @@ class LingKumaAction(InterfaceAction):
         title = getattr(metadata, 'title', None) or f'Book {book_id}'
         direct = next((fmt for fmt in DIRECT_FORMATS if fmt in formats), None)
         source_format = direct or next((fmt for fmt in CONVERSION_PRIORITY if fmt in formats), None) or formats[0]
+        if source_format == 'PDF':
+            raise ValueError('Calibre 移植版不会自动转换 PDF。请用浏览器中的 LingKuma 插件阅读 PDF。')
         temp_root = Path(tempfile.mkdtemp(prefix='lingkuma-calibre-source-'))
         try:
             source = temp_root / ('source.' + source_format.lower())
@@ -152,9 +155,14 @@ class LingKumaAction(InterfaceAction):
     def open_local_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self.gui, '打开电子书', '',
-            '电子书 (*.epub *.htmlz *.txt *.html *.htm *.xhtml *.azw3 *.mobi *.fb2 *.docx *.odt *.rtf *.pdf);;所有文件 (*)',
+            '电子书 (*.epub *.htmlz *.txt *.html *.htm *.xhtml *.azw3 *.mobi *.fb2 *.docx *.odt *.rtf);;所有文件 (*)',
         )
         if not path:
+            return
+        if Path(path).suffix.lower() == '.pdf':
+            error_dialog(self.gui, '无法打开文件',
+                         'Calibre 移植版不会自动转换 PDF。请用浏览器中的 LingKuma 插件阅读 PDF。',
+                         show=True)
             return
         temp_root = Path(tempfile.mkdtemp(prefix='lingkuma-calibre-file-'))
         source = temp_root / Path(path).name

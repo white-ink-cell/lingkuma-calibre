@@ -30,7 +30,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ---
 [miseya/kuromoji.js: JavaScript implementation of Japanese morphological analyzer. With types and browser support.](https://github.com/miseya/kuromoji.js)
 
-src\service\jp\LICENSE-2.0.txt
+licenses/KUROMOJI-APACHE-2.0.txt
 src\service\jp\kuromoji.js
 
 
@@ -490,3 +490,30 @@ Changes:
 
 
 ---
+# Calibre Edge speech client (Windows / Calibre 9.16)
+
+This Calibre port includes unmodified wheel archives in
+`resources/vendor/edge_tts_wheels/`. At runtime they are extracted to the
+plugin's versioned directory, where users can inspect and replace them.
+`edge-tts` 7.3.1 is by rany2 and contributors, licensed LGPL-3.0-only, except
+its MIT-licensed `srt_composer.py`. Its Python source and license text are
+inside the unmodified `edge_tts-7.3.1-py3-none-any.whl`; source is also at
+https://github.com/rany2/edge-tts. The remaining bundled wheels
+are aiohappyeyeballs 2.7.1, aiohttp 3.14.5, aiosignal 1.4.0,
+async-timeout 5.0.1, attrs 26.1.0, certifi 2026.10.18, frozenlist 1.8.0,
+idna 3.20, multidict 7.1.0, propcache 0.5.4, tabulate 0.10.0,
+typing-extensions 4.16.0, and yarl 1.25.1. Each unmodified wheel retains its
+own `.dist-info` metadata and license files. `certifi` carries MPL-2.0;
+the other dependencies' notices and terms are in their wheel archives.
+
+## English Wiktionary dictionary data
+
+The bundled English-to-Simplified-Chinese dictionary is derived and modified
+from English Wiktionary contributor data extracted through Wiktextract and
+distributed by Kaikki.org. The same dictionary bytes and data notice are used
+by the LingKuma Zotero port.
+
+License: CC BY-SA 4.0
+Source: https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz
+Attribution and modification notice:
+licenses/ENGLISH-WIKTIONARY-DATA-NOTICE.txt

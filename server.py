@@ -15,7 +15,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from calibre.utils.config import config_dir
 from calibre_plugins.lingkuma_calibre.compat import safe_join
+from calibre_plugins.lingkuma_calibre.gpt_tts import fetch_gpt_tts_audio
+from calibre_plugins.lingkuma_calibre.edge_tts_host import fetch_edge_tts_audio, cancel_edge_tts_audio
+from calibre_plugins.lingkuma_calibre.lookup_host import LookupHost
 from calibre_plugins.lingkuma_calibre.version import VERSION_STR
 
 UPSTREAM_SCRIPTS = (
@@ -29,10 +33,13 @@ UPSTREAM_SCRIPTS = (
     'src/utils/evaluateExpression.js',
     'src/utils/pdfDetection.js',
     'src/utils/sentenseOoOo.js',
+    'src/plugin/bionic.js',
     'src/utils/liquid-glass.js',
+    'src/plugin/readingRuler.js',
     'src/plugin/min/compromise.js',
     'src/plugin/min/de-compromise.min.js',
     'src/utils/language-detector/eld.extrasmall.global.js',
+    'src/plugin/pos-highlight.js',
     'src/service/a3_aiFragen.js',
     'src/service/a4_tooltip_new.js',
     'src/service/a5_custom_word_selection.js',
@@ -48,6 +55,28 @@ UPSTREAM_SCRIPTS = (
 
 def _json_for_script(value) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+
+
+def _short_cjk_sentence_gate(rel: str, source: str) -> str:
+    """Add the Calibre-only short-phrase hook while retaining vendored bytes."""
+    if rel not in {'upstream/src/service/a4_tooltip_new.js',
+                   'upstream/src/service/a7_words_boom.js'}:
+        return source
+    info_gate = 'sentenceInfo.sentence && sentenceInfo.sentence.trim().length >= 5'
+    info_hook = ('sentenceInfo.sentence && (sentenceInfo.sentence.trim().length >= 5'
+                 ' || globalThis.__LINGKUMA_CJK_SHORT_SENTENCE_ALLOWED__?.(sentenceInfo.sentence))')
+    expected = 1 if rel.endswith('a4_tooltip_new.js') else 2
+    if source.count(info_gate) != expected:
+        raise ValueError(f'LingKuma upstream sentence gate changed: {rel}')
+    source = source.replace(info_gate, info_hook)
+    if rel.endswith('a7_words_boom.js'):
+        fallback_gate = 'if (sentence && sentence.trim().length >= 5) {'
+        fallback_hook = ('if (sentence && (sentence.trim().length >= 5'
+                         ' || globalThis.__LINGKUMA_CJK_SHORT_SENTENCE_ALLOWED__?.(sentence))) {')
+        if source.count(fallback_gate) != 1:
+            raise ValueError(f'LingKuma upstream fallback gate changed: {rel}')
+        source = source.replace(fallback_gate, fallback_hook)
+    return source
 
 
 def _decode_html(data: bytes) -> str:
@@ -88,10 +117,11 @@ def _sanitize_book_html(document: str) -> str:
 
 
 class ReaderServer:
-    def __init__(self, resource_root: str | Path, package, state, plugin_version: str = VERSION_STR, viewer_preferences: dict | None = None):
+    def __init__(self, resource_root: str | Path, package, state, plugin_version: str = VERSION_STR, viewer_preferences: dict | None = None, lookup_data_root: str | Path | None = None):
         self.resource_root = Path(resource_root).resolve()
         self.package = package
         self.state = state
+        self.lookup_host = LookupHost(self.resource_root, lookup_data_root or Path(config_dir) / 'plugins' / 'lingkuma-calibre' / 'lookup')
         self.plugin_version = plugin_version
         self.viewer_preferences = dict(viewer_preferences or {})
         self.token = secrets.token_urlsafe(24)
@@ -100,14 +130,17 @@ class ReaderServer:
         self.ui_queue: queue.Queue[str] = queue.Queue()
         self.last_error = ''
         self._lifecycle_lock = threading.RLock()
+        self._edge_request_ids: set[str] = set()
         self._inline_scripts = self._build_inline_scripts()
 
     def _build_inline_scripts(self) -> list[tuple[str, str]]:
         scripts: list[tuple[str, str]] = []
-        paths = ['adapter/platform.js', 'adapter/shadow_capture.js'] + [f'upstream/{path}' for path in UPSTREAM_SCRIPTS] + ['compat/language_bridge.js', 'compat/theme_event_bridge.js', 'compat/glass_fallback.js', 'compat/sentence_patch.js', 'host/page_appearance.js', 'host/navigation_progress.js', 'adapter/lingkuma_boot.js']
+        paths = ['adapter/platform.js', 'adapter/shadow_capture.js',
+                 'adapter/dictionary_catalog.js', 'adapter/lookup.js', 'adapter/lookup_host.js'] + [f'upstream/{path}' for path in UPSTREAM_SCRIPTS] + ['adapter/edge_tts_bridge.js', 'adapter/language_bridge.js', 'compat/sentence_patch.js', 'adapter/lookup_ui.js', 'adapter/word_explosion_bridge.js', 'compat/theme_event_bridge.js', 'compat/glass_fallback.js', 'host/page_appearance.js', 'host/navigation_progress.js', 'adapter/lingkuma_boot.js']
         for rel in paths:
             target = safe_join(self.resource_root, rel)
-            source = target.read_text(encoding='utf-8').replace('</script', '<\\/script')
+            source = _short_cjk_sentence_gate(rel, target.read_text(encoding='utf-8'))
+            source = source.replace('</script', '<\\/script')
             scripts.append((rel, source))
         return scripts
 
@@ -179,6 +212,11 @@ class ReaderServer:
                         return self._serve_book(rel[5:])
                     if rel.startswith('res/'):
                         return self._serve_resource(rel[4:])
+                    if rel == 'lookup-import-worker':
+                        data = parent.lookup_import_worker_html()
+                        self._headers(200, 'text/html; charset=utf-8', len(data))
+                        self._safe_write(data)
+                        return
                     if rel == 'api/bootstrap':
                         return self._json(parent.bootstrap(0))
                     return self._json({'error': 'not found'}, HTTPStatus.NOT_FOUND)
@@ -205,6 +243,25 @@ class ReaderServer:
                         result = {'success': True, 'changes': parent.state.storage_clear()}
                     elif action == 'message':
                         result = parent.state.handle_message(payload)
+                    elif action == 'lookup/op':
+                        result = parent.lookup_host.run(payload)
+                    elif action == 'lookup/translate':
+                        result = {'value': parent.lookup_host.translate_quick(payload)}
+                    elif action == 'tts/gpt':
+                        result = fetch_gpt_tts_audio(payload)
+                    elif action == 'tts/edge':
+                        request_id = payload.get('requestId')
+                        if isinstance(request_id, str):
+                            with parent._lifecycle_lock:
+                                parent._edge_request_ids.add(request_id)
+                        try:
+                            result = fetch_edge_tts_audio(payload)
+                        finally:
+                            if isinstance(request_id, str):
+                                with parent._lifecycle_lock:
+                                    parent._edge_request_ids.discard(request_id)
+                    elif action == 'tts/edge/cancel':
+                        result = {'cancelled': cancel_edge_tts_audio(payload.get('requestId'))}
                     elif action == 'progress':
                         parent.state.set_progress(parent.package.book_key, payload.get('chapter', 0), payload.get('scrollRatio', 0))
                         result = {'success': True}
@@ -221,7 +278,7 @@ class ReaderServer:
                     else:
                         return self._json({'error': 'unknown API action'}, HTTPStatus.NOT_FOUND)
                     return self._json(result)
-                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
                     return
                 except Exception as error:
                     parent.last_error = traceback.format_exc()
@@ -294,7 +351,10 @@ class ReaderServer:
 
     def stop(self) -> None:
         """Stop the loopback server and wait briefly for its daemon thread."""
+        self.lookup_host.release_all_leases()
         with self._lifecycle_lock:
+            for request_id in self._edge_request_ids:
+                cancel_edge_tts_audio(request_id)
             httpd, thread = self.httpd, self.thread
             self.httpd = None
             self.thread = None
@@ -338,12 +398,29 @@ class ReaderServer:
             'tabID': 1,
             'bookKey': self.package.book_key,
             'bookTitle': self.package.title,
+            'bookLanguage': str(self.package.metadata.get('language') or ''),
             'chapterIndex': int(chapter_index),
             'chapterCount': len(self.package.chapters),
             'progress': self.state.get_progress(self.package.book_key),
             'storage': storage,
             'calibreViewer': self.viewer_preferences,
         }
+
+    def lookup_import_worker_html(self) -> bytes:
+        """Minimal same-origin page for Qt to invoke the reused JS importer."""
+        boot = _json_for_script({
+            'baseURL': self.base_url,
+            'pluginVersion': self.plugin_version,
+            'tabID': 1,
+            'storage': self.state.storage_get(None),
+        })
+        needed = {'adapter/platform.js', 'adapter/dictionary_catalog.js',
+                  'adapter/lookup.js', 'adapter/lookup_host.js'}
+        scripts = [f'<script>globalThis.__LINGKUMA_CALIBRE_BOOTSTRAP__={boot};</script>']
+        scripts.extend(f'<script data-lingkuma-source="{rel}">{source}</script>'
+                       for rel, source in self._inline_scripts if rel in needed)
+        return ('<!doctype html><html><head><meta charset="utf-8"></head><body>'
+                + ''.join(scripts) + '</body></html>').encode('utf-8')
 
     def inject_html(self, data: bytes, chapter_index: int) -> bytes:
         document = _decode_html(data)

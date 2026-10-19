@@ -1,11 +1,11 @@
 # Upstream Project and Porting Notes
 
-[English](UPSTREAM.md) | [简体中文](UPSTREAM_zh.md) | [日本語](UPSTREAM_ja.md) | [한국어](UPSTREAM_ko.md)
+[English](UPSTREAM.md) | [简体中文](upstreams/UPSTREAM_zh.md) | [日本語](upstreams/UPSTREAM_ja.md) | [한국어](upstreams/UPSTREAM_ko.md)
 
-This project is an unofficial Calibre port of **LingKuma 1.1.0**.
+This project is an unofficial Calibre port of **LingKuma 1.1.1**.
 
 - Original project: `lingkuma/LingKuma`
-- Upstream version: LingKuma 1.1.0
+- Upstream version: LingKuma 1.1.1
 - Calibre port maintained / published by: `white-ink-cell`
 
 The original LingKuma authorship, copyright, licenses, and bundled upstream resources remain unchanged.

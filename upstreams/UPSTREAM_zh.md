@@ -1,11 +1,11 @@
 # 上游项目与移植说明
 
-[English](UPSTREAM.md) | **简体中文** | [日本語](UPSTREAM_ja.md) | [한국어](UPSTREAM_ko.md)
+[English](../UPSTREAM.md) | **简体中文** | [日本語](UPSTREAM_ja.md) | [한국어](UPSTREAM_ko.md)
 
-本项目是 **LingKuma 1.1.0** 的非官方 Calibre 移植版。
+本项目是 **LingKuma 1.1.1** 的非官方 Calibre 移植版。
 
 - 原项目：`lingkuma/LingKuma`
-- 上游版本：LingKuma 1.1.0
+- 上游版本：LingKuma 1.1.1
 - Calibre 移植版维护 / 发布：`white-ink-cell`
 
 LingKuma 原项目的作者、版权、许可证和随项目分发的上游资源保持不变。

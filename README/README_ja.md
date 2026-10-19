@@ -79,21 +79,28 @@ LingKuma は、まだ学習途中の言語で書かれたコンテンツを読�
 Calibre 移植版では、以下の対応を追加しています：
 
 - Calibre / Qt WebEngine 実行環境への対応
-- EPUB と PDF 閲覧時の文選択を改善
+- EPUB 閲覧時の文選択を改善
 - 日本語・韓国語の短文認識に対応
 - Calibre に対応したすりガラス効果
 - 多言語翻訳および AI 出力への対応
 - Calibre の読書環境との統合
 
+## バージョン 1.1.2
+
+- Calibre の EPUB リーダーで LingKuma 1.1.1 の読書機能を維持し、設定、言語選択、単語帳、読書補助を追加しました。
+- 英単語の検索にはローカル辞書、翻訳/API、任意の AI 詳細説明を用意し、意味を確認・編集できます。
+- ローカル、Edge、GPT TTS に設定と試聴機能があります。Windows では米国・英国音声と停止操作を利用者が確認しました。有料 GPT 音声の実サービス試験は未実施です。
+- 変更点と検証範囲は [CHANGELOG.md](../CHANGELOG.md) を参照してください。
+
 ## インストール
 
-1. **GitHub Releases** から `lingkuma-calibre-1.0.zip` をダウンロードします。
+1. **GitHub Releases** から `lingkuma-calibre-1.1.2.zip` をダウンロードします。
 2. **Calibre → 設定 → プラグイン** を開きます。
 3. **ファイルからプラグインを読み込む** を選択します。
-4. ダウンロードした `lingkuma-calibre-1.0.zip` を選択します。
+4. ダウンロードした `lingkuma-calibre-1.1.2.zip` を選択します。
 5. Calibre を再起動します。
 
-> GitHub が自動生成する `Source code (zip)` はインストールしないでください。Release に添付されている `lingkuma-calibre-1.0.zip` プラグインパッケージを使用してください。
+> GitHub が自動生成する `Source code (zip)` はインストールしないでください。Release に添付されている `lingkuma-calibre-1.1.2.zip` プラグインパッケージを使用してください。
 
 ## その他のバージョン
 
@@ -102,9 +109,9 @@ Calibre 移植版では、以下の対応を追加しています：
 
 ## 対応環境
 
-- Calibre 9.x
-- EPUB および PDF の読書
-- Windows / macOS / Linux
+- Windows x64 に対応。最低要件は Calibre 9.16 で、Calibre 9.16 / Python 3.14 で検証済みです。
+- EPUB の読書に対応。この移植版では PDF を自動変換・処理しません。PDF は元の LingKuma ブラウザー拡張で閲覧できます。
+- macOS と Linux は今回のリリースのサポート対象外です。同梱の Edge TTS ネイティブ wheel は Windows AMD64 / Python 3.14 向けです。
 
 ## 設定
 
@@ -117,17 +124,17 @@ LingKuma for Calibre はローカルの状態を Calibre のプラグインデ�
 ## 上流プロジェクトとクレジット
 
 - オリジナルプロジェクト：**LingKuma**
-- 上流バージョン：**LingKuma 1.1.0**
+- 上流バージョン：**LingKuma 1.1.1**
 - Calibre 移植版のメンテナンスおよび公開：**white-ink-cell**
 
 このリポジトリは LingKuma の非公式 Calibre 移植版を提供します。
 
 この移植版では、LingKuma を Calibre の読書環境に適応させながら、オリジナルプロジェクトの主要機能、インターフェース、アセット、全体的なデザインを可能な限り維持しています。Calibre 向けの変更は、主に実行環境の互換性、文選択、すりガラス効果、多言語翻訳への対応に重点を置いています。
 
-詳細については `UPSTREAM.md` を参照してください。
+詳細については [UPSTREAM.md](../UPSTREAM.md) を参照してください。
 
 ## ライセンス
 
 オリジナル LingKuma の作者表記、著作権、ライセンスは変更されていません。
 
-Calibre アダプターおよび互換レイヤーには `LICENSE-ADAPTER.txt` のライセンスが適用されます。オリジナル LingKuma のライセンスは `LICENSE-LINGKUMA.txt` に保持されており、同梱されているサードパーティのライセンスおよび通知は `THIRD-PARTY-NOTICES.txt` に記載されています。
+Calibre アダプターおよび互換レイヤーには `licenses/LICENSE-ADAPTER.txt` のライセンスが適用されます。オリジナル LingKuma のライセンスは `LICENSE-LINGKUMA.txt` に保持されており、同梱されているサードパーティのライセンスおよび通知は `THIRD-PARTY-NOTICES.txt` に記載されています。
